@@ -22,14 +22,14 @@ struct Marker {
     int x;
     int y;
     int isCarried;
-    int isActive;
+    int isActive; //markers get deactivated when dropped so they don't get picked up again
 };
 
 void drawArena();
 void drawMarkers(struct Marker markers[]);
 
 void drawRobot(struct Robot robot);
-void forward(struct Robot* robot);
+void forward(struct Robot* robot, struct Marker markers[]);
 void left(struct Robot* robot);
 void right(struct Robot* robot);
 int canMoveForward(struct Robot robot);
@@ -62,26 +62,24 @@ int main(int argc, char const *argv[])
 
         // robot mechanics
         if (canMoveForward(robot)){
-            forward(&robot);
-            for (int i = 0; i < MARKER_COUNT; i++) {
-                if (markers[i].isCarried) {
-                    markers[i].x = robot.x;
-                    markers[i].y = robot.y;
-                }
-            }
-            if (atMarker(&robot, markers)){
-                // pickUpMarker() gets called inside of the atMarker() function for optimization, so we don't need to do a linear search again to find out which marker the robot is standing on
-            }
+            forward(&robot, markers);
+            
         }
         else{
             right(&robot);
             dropMarker(&robot, markers);
         }
         // robot mechanics end
+        for (int i = 0; i < MARKER_COUNT; i++) { // Update positions of carried markers
+                if (markers[i].isCarried) {
+                    markers[i].x = robot.x;
+                    markers[i].y = robot.y;
+                }
+            }
 
         drawRobot(robot);
         drawMarkers(markers);
-        sleep(200);
+        sleep(100);
     }
     return 0;
 }
@@ -155,7 +153,7 @@ void drawRobot(struct Robot robot){
     }
 }
 
-void forward(struct Robot* robot){
+void forward(struct Robot* robot, struct Marker markers[]){
     switch (robot->direction){
         case 0: //up
             robot->y -= 1;
@@ -170,6 +168,9 @@ void forward(struct Robot* robot){
             robot->x -= 1;
             break;
     }
+    if (atMarker(robot, markers)){ //check if robot is at a marker after moving
+                // pickUpMarker() gets called inside of the atMarker() function for optimization, so we don't need to do a linear search again to find out which marker the robot is standing on
+            }
 }
 
 void left(struct Robot* robot){
