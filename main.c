@@ -184,6 +184,10 @@ int canMoveForward(struct Robot robot){
     return 0;
 }
 
+int markerCount(struct Robot robot){
+    return robot.markerCount;
+}
+
 int atMarker(struct Robot robot, struct Marker markers[]){
     for (int i = 0; i < MARKER_COUNT; i++) {
         if (robot.x == markers[i].x && robot.y == markers[i].y) {
@@ -196,4 +200,8 @@ int atMarker(struct Robot robot, struct Marker markers[]){
 
 void pickUpMarker(struct Marker* marker) {
     marker->isCarried = 1;
+}
+
+void dropMarker(struct Marker* marker){
+    marker->isCarried = 0;
 }
