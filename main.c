@@ -29,24 +29,29 @@ void drawArena();
 void drawMarkers(struct Marker markers[]);
 
 void drawRobot(struct Robot robot);
-void forward(struct Robot* robot, struct Marker markers[]);
+void forward(struct Robot* robot, struct Marker markers[], int map[COLS][ROWS]);
 void left(struct Robot* robot);
 void right(struct Robot* robot);
-int canMoveForward(struct Robot robot);
-int atMarker(struct Robot* robot, struct Marker markers[]);
+int canMoveForward(struct Robot robot, int map[COLS][ROWS]);
+int atMarker(struct Robot* robot, struct Marker markers[], int map[COLS][ROWS]);
 void pickUpMarker(struct Marker* marker);
 void dropMarker(struct Robot* robot, struct Marker markers[]);
 
 int main(int argc, char const *argv[])
 {
     srand(time(NULL));  // random seed generator
+    
     struct Robot robot = {rand() % COLS, rand() % ROWS, 0}; //position in terms of grid coordinates, not pixels
     struct Marker markers[MARKER_COUNT];
+    int map[COLS][ROWS] = {0}; // 0 = empty, 1 = marker, 2 = obstacle, this 2d array is only for targeted location checks
     for (int i = 0; i < MARKER_COUNT; i++) {
-        markers[i].x = 0;
-        markers[i].y = rand() % ROWS;
+        int x = 0;
+        int y = rand() % ROWS;
+        markers[i].x = x;
+        markers[i].y = y;
         markers[i].isCarried = 0;
         markers[i].isActive = 1;
+        map[x][y] = 1; // Update the map to place the marker
     }
 
     setWindowSize(WINDOW_WIDTH + 1, WINDOW_HEIGHT + 1);
@@ -61,8 +66,8 @@ int main(int argc, char const *argv[])
         clear();
 
         // robot mechanics
-        if (canMoveForward(robot)){
-            forward(&robot, markers);
+        if (canMoveForward(robot, map)){
+            forward(&robot, markers, map);
             
         }
         else{
@@ -153,7 +158,7 @@ void drawRobot(struct Robot robot){
     }
 }
 
-void forward(struct Robot* robot, struct Marker markers[]){
+void forward(struct Robot* robot, struct Marker markers[], int map[COLS][ROWS]){
     switch (robot->direction){
         case 0: //up
             robot->y -= 1;
@@ -168,7 +173,7 @@ void forward(struct Robot* robot, struct Marker markers[]){
             robot->x -= 1;
             break;
     }
-    if (atMarker(robot, markers)){ //check if robot is at a marker after moving
+    if (atMarker(robot, markers, map)){ //check if robot is at a marker after moving
                 // pickUpMarker() gets called inside of the atMarker() function for optimization, so we don't need to do a linear search again to find out which marker the robot is standing on
             }
 }
@@ -180,16 +185,16 @@ void right(struct Robot* robot){
     robot->direction = (robot->direction + 1) % 4; //turn right (suggestion made by github copilot, modulo loop)
 }
 
-int canMoveForward(struct Robot robot){
+int canMoveForward(struct Robot robot, int map[COLS][ROWS]){
     switch (robot.direction){
         case 0: //up
-            return robot.y != 0;
+            return robot.y != 0 && map[robot.x][robot.y - 1] != 2;
         case 1: //right
-            return robot.x != COLS - 1;
+            return robot.x != COLS - 1 && map[robot.x + 1][robot.y] != 2;
         case 2: //down
-            return robot.y != ROWS - 1;
+            return robot.y != ROWS - 1 && map[robot.x][robot.y + 1] != 2;
         case 3: //left
-            return robot.x != 0;
+            return robot.x != 0 && map[robot.x - 1][robot.y] != 2;
     }
     return 0;
 }
@@ -198,14 +203,16 @@ int markerCount(struct Robot robot){
     return robot.markerCount;
 }
 
-int atMarker(struct Robot* robot, struct Marker markers[]){
-    for (int i = 0; i < MARKER_COUNT; i++) {
-        if (robot->x == markers[i].x && robot->y == markers[i].y) {
-            if (markers[i].isActive){
-                robot->markerCount += 1;
-                pickUpMarker(&markers[i]);
+int atMarker(struct Robot* robot, struct Marker markers[], int map[COLS][ROWS]){
+    if (map[robot->x][robot->y] == 1) { // check if there's a marker at the robot's position
+        for (int i = 0; i < MARKER_COUNT; i++) { // if so, find which marker in the list. This wouldn't be necessary if we stored the pointers to the markers inside the map, but the marker count isn't too high anyways so I went with the basic way.
+            if (robot->x == markers[i].x && robot->y == markers[i].y) {
+                if (markers[i].isActive){ // only pick up if the marker is active
+                    robot->markerCount += 1;
+                    pickUpMarker(&markers[i]);
+                }
+                return 1; // return that there is a marker in the location, even if it's not picked up
             }
-            return 1;
         }
     }
     return 0;
