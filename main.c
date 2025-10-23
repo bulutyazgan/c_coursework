@@ -22,7 +22,6 @@ struct Marker {
     int x;
     int y;
     int isCarried;
-    int isActive; //markers get deactivated when dropped so they don't get picked up again
 };
 
 void drawArena();
@@ -34,7 +33,7 @@ void left(struct Robot* robot);
 void right(struct Robot* robot);
 int canMoveForward(struct Robot robot, int map[COLS][ROWS]);
 int atMarker(struct Robot* robot, struct Marker markers[], int map[COLS][ROWS]);
-void pickUpMarker(struct Marker* marker);
+void pickUpMarker(struct Robot* robot,struct Marker* marker);
 void dropMarker(struct Robot* robot, struct Marker markers[]);
 
 int main(int argc, char const *argv[])
@@ -50,7 +49,6 @@ int main(int argc, char const *argv[])
         markers[i].x = x;
         markers[i].y = y;
         markers[i].isCarried = 0;
-        markers[i].isActive = 1;
         map[x][y] = 1; // Update the map to place the marker
     }
 
@@ -204,29 +202,34 @@ int markerCount(struct Robot robot){
 }
 
 int atMarker(struct Robot* robot, struct Marker markers[], int map[COLS][ROWS]){
-    if (map[robot->x][robot->y] == 1) { // check if there's a marker at the robot's position
-        for (int i = 0; i < MARKER_COUNT; i++) { // if so, find which marker in the list. This wouldn't be necessary if we stored the pointers to the markers inside the map, but the marker count isn't too high anyways so I went with the basic way.
+    if (
+        map[robot->x][robot->y] == 1 && // check if there's a marker at the robot's position
+        !(
+        (robot->x == 0 && robot->y == 0) ||
+        (robot->x == COLS && robot->y == 0) ||
+        (robot->x == 0 && robot->y == ROWS) ||
+        (robot->x == COLS && robot->y == ROWS)
+        )
+        ) { // check if the marker is in the corner already. This actually isn't necessary because they would be dropped back instantly anyways, but I still checked to keep the simulation realistic
+        for (int i = 0; i < MARKER_COUNT; i++) { // if there is a marker, find which marker in the list. This wouldn't be necessary if we stored the addresses to the markers inside the map array, but the marker count isn't too high anyways so I went with the basic way.
             if (robot->x == markers[i].x && robot->y == markers[i].y) {
-                if (markers[i].isActive){ // only pick up if the marker is active
-                    robot->markerCount += 1;
-                    pickUpMarker(&markers[i]);
-                }
-                return 1; // return that there is a marker in the location, even if it's not picked up
+                pickUpMarker(robot, &markers[i]);
+                return 1; // return that there is a marker in the location (corner markers are ignored as they're already in the right place)
             }
         }
     }
     return 0;
 }
 
-void pickUpMarker(struct Marker* marker) {
+void pickUpMarker(struct Robot* robot, struct Marker* marker) {
     marker->isCarried = 1;
+    robot->markerCount += 1;
 }
 
 void dropMarker(struct Robot* robot, struct Marker markers[]){
     for (int i = 0; i < MARKER_COUNT; i++) {
         if (markers[i].isCarried) {
             markers[i].isCarried = 0;
-            markers[i].isActive = 0;
             robot->markerCount -= 1;
         }
     }
