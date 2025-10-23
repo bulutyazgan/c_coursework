@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <time.h>
 
-
 #define ROWS 15
 #define COLS 15
 #define GRID_SIZE 40
@@ -29,14 +28,15 @@ void drawMarkers(struct Marker markers[]);
 
 void drawRobot(struct Robot robot);
 void forward(struct Robot* robot, struct Marker markers[], int map[COLS][ROWS]);
-void left(struct Robot* robot);
-void right(struct Robot* robot);
+void left(struct Robot* robot, struct Marker markers[]);
+void right(struct Robot* robot, struct Marker markers[]);
 int canMoveForward(struct Robot robot, int map[COLS][ROWS]);
 int atMarker(struct Robot* robot, struct Marker markers[], int map[COLS][ROWS]);
 void pickUpMarker(struct Robot* robot,struct Marker* marker);
 void dropMarker(struct Robot* robot, struct Marker markers[]);
 int checkAtCorner(struct Robot robot);
 int markerCount(struct Robot robot);
+void drawMovingObjects(struct Robot robot, struct Marker markers[]);
 
 int main(int argc, char const *argv[])
 {
@@ -63,23 +63,19 @@ int main(int argc, char const *argv[])
     drawRobot(robot);
     drawMarkers(markers);
     while (1){
+
         // robot mechanics
         if (canMoveForward(robot, map)){
             forward(&robot, markers, map);
         }
         else{
-            left(&robot);
+            left(&robot, markers);
         }
         // robot mechanics end
-        
-        clear();
-        drawRobot(robot);
-        drawMarkers(markers);
-        sleep(500);
+
     }
     return 0;
 }
-
 
 void drawArena(){
     // draw grid
@@ -149,6 +145,13 @@ void drawRobot(struct Robot robot){
     }
 }
 
+void drawMovingObjects(struct Robot robot, struct Marker markers[]){
+    clear(); // everytime there's a movement, update the elements that moved
+    drawRobot(robot);
+    drawMarkers(markers);
+    sleep(300);
+}
+
 void forward(struct Robot* robot, struct Marker markers[], int map[COLS][ROWS]){
     switch (robot->direction){
         case 0: //up
@@ -176,13 +179,16 @@ void forward(struct Robot* robot, struct Marker markers[], int map[COLS][ROWS]){
     if (markerCount(*robot) > 0 && checkAtCorner(*robot)) {
                 dropMarker(robot, markers);
             }
+    drawMovingObjects(*robot, markers);
 }
 
-void left(struct Robot* robot){
+void left(struct Robot* robot, struct Marker markers[]){
     robot->direction = (robot->direction + 3) % 4; //turn left (suggestion made by github copilot, modulo loop)
+    drawMovingObjects(*robot, markers);
 }
-void right(struct Robot* robot){
+void right(struct Robot* robot, struct Marker markers[]){
     robot->direction = (robot->direction + 1) % 4; //turn right (suggestion made by github copilot, modulo loop)
+    drawMovingObjects(*robot, markers);
 }
 
 int canMoveForward(struct Robot robot, int map[COLS][ROWS]){
