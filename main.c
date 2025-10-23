@@ -1,6 +1,7 @@
 #include "graphics.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
 
 
 #define ROWS 15
@@ -21,6 +22,7 @@ struct Marker {
     int x;
     int y;
     int isCarried;
+    int isActive;
 };
 
 void drawArena();
@@ -31,18 +33,20 @@ void forward(struct Robot* robot);
 void left(struct Robot* robot);
 void right(struct Robot* robot);
 int canMoveForward(struct Robot robot);
-int atMarker(struct Robot robot, struct Marker markers[]);
+int atMarker(struct Robot* robot, struct Marker markers[]);
 void pickUpMarker(struct Marker* marker);
-void dropMarker(struct Marker* marker);
+void dropMarker(struct Robot* robot, struct Marker markers[]);
 
 int main(int argc, char const *argv[])
 {
-    struct Robot robot = {5, 5, 0}; //position in terms of grid coordinates, not pixels
+    srand(time(NULL));  // random seed generator
+    struct Robot robot = {rand() % COLS, rand() % ROWS, 0}; //position in terms of grid coordinates, not pixels
     struct Marker markers[MARKER_COUNT];
     for (int i = 0; i < MARKER_COUNT; i++) {
-        markers[i].x = ROWS - 1;
-        markers[i].y = 2;
+        markers[i].x = 0;
+        markers[i].y = rand() % ROWS;
         markers[i].isCarried = 0;
+        markers[i].isActive = 1;
     }
 
     setWindowSize(WINDOW_WIDTH + 1, WINDOW_HEIGHT + 1);
@@ -55,6 +59,8 @@ int main(int argc, char const *argv[])
     drawMarkers(markers);
     while (1){
         clear();
+
+        // robot mechanics
         if (canMoveForward(robot)){
             forward(&robot);
             for (int i = 0; i < MARKER_COUNT; i++) {
@@ -63,23 +69,19 @@ int main(int argc, char const *argv[])
                     markers[i].y = robot.y;
                 }
             }
-            if (atMarker(robot, markers)){
-                robot.markerCount += 1;
+            if (atMarker(&robot, markers)){
                 // pickUpMarker() gets called inside of the atMarker() function for optimization, so we don't need to do a linear search again to find out which marker the robot is standing on
             }
         }
         else{
             right(&robot);
-            for (int i = 0; i < MARKER_COUNT; i++) {
-                if (markers[i].isCarried) {
-                    dropMarker(&markers[i]);
-                    robot.markerCount -= 1;
-                }
-            }
+            dropMarker(&robot, markers);
         }
+        // robot mechanics end
+
         drawRobot(robot);
         drawMarkers(markers);
-        sleep(500);
+        sleep(200);
     }
     return 0;
 }
@@ -195,10 +197,13 @@ int markerCount(struct Robot robot){
     return robot.markerCount;
 }
 
-int atMarker(struct Robot robot, struct Marker markers[]){
+int atMarker(struct Robot* robot, struct Marker markers[]){
     for (int i = 0; i < MARKER_COUNT; i++) {
-        if (robot.x == markers[i].x && robot.y == markers[i].y) {
-            pickUpMarker(&markers[i]);
+        if (robot->x == markers[i].x && robot->y == markers[i].y) {
+            if (markers[i].isActive){
+                robot->markerCount += 1;
+                pickUpMarker(&markers[i]);
+            }
             return 1;
         }
     }
@@ -209,6 +214,12 @@ void pickUpMarker(struct Marker* marker) {
     marker->isCarried = 1;
 }
 
-void dropMarker(struct Marker* marker){
-    marker->isCarried = 0;
+void dropMarker(struct Robot* robot, struct Marker markers[]){
+    for (int i = 0; i < MARKER_COUNT; i++) {
+        if (markers[i].isCarried) {
+            markers[i].isCarried = 0;
+            markers[i].isActive = 0;
+            robot->markerCount -= 1;
+        }
+    }
 }
