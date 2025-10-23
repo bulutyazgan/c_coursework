@@ -33,6 +33,7 @@ void right(struct Robot* robot);
 int canMoveForward(struct Robot robot);
 int atMarker(struct Robot robot, struct Marker markers[]);
 void pickUpMarker(struct Marker* marker);
+void dropMarker(struct Marker* marker);
 
 int main(int argc, char const *argv[])
 {
@@ -64,11 +65,17 @@ int main(int argc, char const *argv[])
             }
             if (atMarker(robot, markers)){
                 robot.markerCount += 1;
-                // pickUpMarker() gets called inside of the atMarker() function
+                // pickUpMarker() gets called inside of the atMarker() function for optimization, so we don't need to do a linear search again to find out which marker the robot is standing on
             }
         }
         else{
             right(&robot);
+            for (int i = 0; i < MARKER_COUNT; i++) {
+                if (markers[i].isCarried) {
+                    dropMarker(&markers[i]);
+                    robot.markerCount -= 1;
+                }
+            }
         }
         drawRobot(robot);
         drawMarkers(markers);
