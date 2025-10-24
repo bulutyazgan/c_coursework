@@ -9,6 +9,7 @@
 #define WINDOW_WIDTH (COLS * GRID_SIZE)
 #define WINDOW_HEIGHT (ROWS * GRID_SIZE)
 #define MARKER_COUNT 5
+#define DELAY 50
 
 struct Robot {
         int x;
@@ -34,7 +35,7 @@ int canMoveForward(struct Robot robot, int map[COLS][ROWS]);
 int atMarker(struct Robot* robot, struct Marker markers[], int map[COLS][ROWS]);
 void pickUpMarker(struct Robot* robot,struct Marker* marker, int map[COLS][ROWS]);
 void dropMarker(struct Robot* robot, struct Marker markers[], int map[COLS][ROWS]);
-int checkAtCorner(struct Robot robot);
+int checkAtCorner(struct Robot robot); // gotta change the implementation of corner checks, robot shouldn't know the arena borders beforehand.
 int markerCount(struct Robot robot);
 void drawMovingObjects(struct Robot robot, struct Marker markers[]);
 
@@ -44,10 +45,10 @@ int main(int argc, char const *argv[])
     
     struct Robot robot = {rand() % COLS, rand() % ROWS, 0}; //position in terms of grid coordinates, not pixels
     struct Marker markers[MARKER_COUNT];
-    int map[COLS][ROWS] = {0}; // 0 = empty, 1 = marker, 2 = obstacle, this 2d array is only for targeted location checks
+    int map[COLS][ROWS] = {0}; // 0 = empty, 1 = marker, 2 = obstacle, this 2D array is only for targeted location checks
     for (int i = 0; i < MARKER_COUNT; i++) {
         int x = rand() % COLS;
-        int y = 0;
+        int y = rand() % ROWS;
         markers[i].x = x;
         markers[i].y = y;
         markers[i].isCarried = 0;
@@ -69,7 +70,29 @@ int main(int argc, char const *argv[])
             forward(&robot, markers, map);
         }
         else{
-            left(&robot, markers);
+            if (checkAtCorner(robot))
+            {
+                right(&robot, markers);
+                if (robot.direction % 4 == 1 && canMoveForward(robot, map)){
+                    forward(&robot, markers, map);
+                    right(&robot, markers);
+                }
+            }
+            else if (robot.direction % 4 == 0){
+                right(&robot, markers);
+                if (canMoveForward(robot, map)){
+                    forward(&robot, markers, map);
+                }
+                right(&robot, markers);
+            }
+            else if (robot.direction % 4 == 2){
+                left(&robot, markers);
+                if (canMoveForward(robot, map))
+                {
+                    forward(&robot, markers, map);
+                }
+                left(&robot, markers);
+            }
         }
         // robot mechanics end
 
@@ -149,7 +172,7 @@ void drawMovingObjects(struct Robot robot, struct Marker markers[]){
     clear(); // everytime there's a movement, update the elements that moved
     drawRobot(robot);
     drawMarkers(markers);
-    sleep(150);
+    sleep(DELAY);
 }
 
 void forward(struct Robot* robot, struct Marker markers[], int map[COLS][ROWS]){
