@@ -28,13 +28,13 @@ void drawArena();
 void drawMarkers(struct Marker markers[]);
 
 void drawRobot(struct Robot robot);
-void forward(struct Robot* robot, struct Marker markers[], int map[COLS][ROWS]);
+void forward(struct Robot* robot, struct Marker markers[], int markerMap[COLS][ROWS]);
 void left(struct Robot* robot, struct Marker markers[]);
 void right(struct Robot* robot, struct Marker markers[]);
-int canMoveForward(struct Robot robot, int map[COLS][ROWS]);
-int atMarker(struct Robot* robot, struct Marker markers[], int map[COLS][ROWS]);
-void pickUpMarker(struct Robot* robot,struct Marker* marker, int map[COLS][ROWS]);
-void dropMarker(struct Robot* robot, struct Marker markers[], int map[COLS][ROWS]);
+int canMoveForward(struct Robot robot, int markerMap[COLS][ROWS]);
+int atMarker(struct Robot* robot, struct Marker markers[], int markerMap[COLS][ROWS]);
+void pickUpMarker(struct Robot* robot,struct Marker* marker, int markerMap[COLS][ROWS]);
+void dropMarker(struct Robot* robot, struct Marker markers[], int markerMap[COLS][ROWS]);
 int checkAtCorner(struct Robot robot); // gotta change the implementation of corner checks, robot shouldn't know the arena borders beforehand.
 int markerCount(struct Robot robot);
 void drawMovingObjects(struct Robot robot, struct Marker markers[]);
@@ -45,14 +45,14 @@ int main(int argc, char const *argv[])
     
     struct Robot robot = {rand() % COLS, rand() % ROWS, 0}; //position in terms of grid coordinates, not pixels
     struct Marker markers[MARKER_COUNT];
-    int map[COLS][ROWS] = {0}; // 0 = empty, 1 = marker, 2 = obstacle, this 2D array is only for targeted location checks
+    int markerMap[COLS][ROWS] = {0}; // 0 = empty, the rest are marker index + 1, this 2D array is only for marker location checks
     for (int i = 0; i < MARKER_COUNT; i++) {
         int x = rand() % COLS;
         int y = rand() % ROWS;
         markers[i].x = x;
         markers[i].y = y;
         markers[i].isCarried = 0;
-        map[x][y] = 1; // Update the map to place the marker
+        markerMap[x][y] = i + 1; // Store marker index + 1 (so 0 means empty)
     }
 
     setWindowSize(WINDOW_WIDTH + 1, WINDOW_HEIGHT + 1);
@@ -66,30 +66,30 @@ int main(int argc, char const *argv[])
     while (1){
 
         // robot mechanics
-        if (canMoveForward(robot, map)){
-            forward(&robot, markers, map);
+        if (canMoveForward(robot, markerMap)){
+            forward(&robot, markers, markerMap);
         }
         else{
             if (checkAtCorner(robot))
             {
                 right(&robot, markers);
-                if (robot.direction % 4 == 1 && canMoveForward(robot, map)){
-                    forward(&robot, markers, map);
+                if (robot.direction % 4 == 1 && canMoveForward(robot, markerMap)){
+                    forward(&robot, markers, markerMap);
                     right(&robot, markers);
                 }
             }
             else if (robot.direction % 4 == 0){
                 right(&robot, markers);
-                if (canMoveForward(robot, map)){
-                    forward(&robot, markers, map);
+                if (canMoveForward(robot, markerMap)){
+                    forward(&robot, markers, markerMap);
                 }
                 right(&robot, markers);
             }
             else if (robot.direction % 4 == 2){
                 left(&robot, markers);
-                if (canMoveForward(robot, map))
+                if (canMoveForward(robot, markerMap))
                 {
-                    forward(&robot, markers, map);
+                    forward(&robot, markers, markerMap);
                 }
                 left(&robot, markers);
             }
@@ -175,7 +175,7 @@ void drawMovingObjects(struct Robot robot, struct Marker markers[]){
     sleep(DELAY);
 }
 
-void forward(struct Robot* robot, struct Marker markers[], int map[COLS][ROWS]){
+void forward(struct Robot* robot, struct Marker markers[], int markerMap[COLS][ROWS]){
     switch (robot->direction){
         case 0: //up
             robot->y -= 1;
@@ -191,17 +191,17 @@ void forward(struct Robot* robot, struct Marker markers[], int map[COLS][ROWS]){
             break;
     }
     for (int i = 0; i < MARKER_COUNT; i++) { // Update positions of carried markers
-                if (markers[i].isCarried) {
-                    markers[i].x = robot->x;
-                    markers[i].y = robot->y;
-                }
-            }
-    if (atMarker(robot, markers, map)){ //check if robot is at a marker after moving
-                // pickUpMarker() gets called inside of the atMarker() function for optimization, so we don't need to do a linear search again to find out which marker the robot is standing on
-            }
+        if (markers[i].isCarried) {
+            markers[i].x = robot->x;
+            markers[i].y = robot->y;
+        }
+    }
+    if (atMarker(robot, markers, markerMap)){ //check if robot is at a marker after moving
+        pickUpMarker(robot, &markers[markerMap[robot->x][robot->y] - 1], markerMap); // deduct 1 to get the correct index
+    }
     if (markerCount(*robot) > 0 && checkAtCorner(*robot)) {
-                dropMarker(robot, markers, map);
-            }
+        dropMarker(robot, markers, markerMap);
+    }
     drawMovingObjects(*robot, markers);
 }
 
@@ -214,16 +214,16 @@ void right(struct Robot* robot, struct Marker markers[]){
     drawMovingObjects(*robot, markers);
 }
 
-int canMoveForward(struct Robot robot, int map[COLS][ROWS]){
+int canMoveForward(struct Robot robot, int markerMap[COLS][ROWS]){
     switch (robot.direction){
         case 0: //up
-            return robot.y != 0 && map[robot.x][robot.y - 1] != 2;
+            return robot.y != 0;
         case 1: //right
-            return robot.x != COLS - 1 && map[robot.x + 1][robot.y] != 2;
+            return robot.x != COLS - 1;
         case 2: //down
-            return robot.y != ROWS - 1 && map[robot.x][robot.y + 1] != 2;
+            return robot.y != ROWS - 1;
         case 3: //left
-            return robot.x != 0 && map[robot.x - 1][robot.y] != 2;
+            return robot.x != 0;
     }
     return 0;
 }
@@ -239,32 +239,25 @@ int markerCount(struct Robot robot){
     return robot.markerCount;
 }
 
-int atMarker(struct Robot* robot, struct Marker markers[], int map[COLS][ROWS]){
-    if (map[robot->x][robot->y] == 1 && !checkAtCorner(*robot)) // check if there's a marker at the robot's position
-    // also checking if the marker is in the corner already. This actually isn't necessary because they would be dropped back instantly anyways, but I still checked to keep the simulation realistic
-    {
-        for (int i = 0; i < MARKER_COUNT; i++) { // if there is a marker, find which marker in the list. This wouldn't be necessary if we stored the addresses to the markers inside the map array, but the marker count isn't too high anyways so I went with the basic way.
-            if (robot->x == markers[i].x && robot->y == markers[i].y && !markers[i].isCarried) {
-                pickUpMarker(robot, &markers[i], map);
-                return 1; // return that there is a marker in the location (corner markers are ignored as they're already in the right place)
-            }
-        }
+int atMarker(struct Robot* robot, struct Marker markers[], int markerMap[COLS][ROWS]){
+    if (markerMap[robot->x][robot->y] > 0 && !checkAtCorner(*robot)) { // markerMap[robot->x][robot->y] > 0 means there's a marker
+        return 1;
     }
     return 0;
 }
 
-void pickUpMarker(struct Robot* robot, struct Marker* marker, int map[COLS][ROWS]) {
+void pickUpMarker(struct Robot* robot, struct Marker* marker, int markerMap[COLS][ROWS]) {
     marker->isCarried = 1;
     robot->markerCount += 1;
-    map[marker->x][marker->y] = 0; // Remove marker from map
+    markerMap[marker->x][marker->y] = 0; // Remove marker from markerMap
 }
 
-void dropMarker(struct Robot* robot, struct Marker markers[], int map[COLS][ROWS]){
-    for (int i = 0; i < MARKER_COUNT; i++) {
+void dropMarker(struct Robot* robot, struct Marker markers[], int markerMap[COLS][ROWS]){
+    for (int i = 0; i < MARKER_COUNT; i++) { // this function gets called when the robot is at the corner and has at least one marker, and the function drops all the markers
         if (markers[i].isCarried) {
             markers[i].isCarried = 0;
             robot->markerCount -= 1;
-            map[markers[i].x][markers[i].y] = 1; // Place marker back on map
+            markerMap[markers[i].x][markers[i].y] = i + 1; // Store marker index + 1 back in the map
         }
     }
 }
