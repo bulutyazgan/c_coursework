@@ -1,6 +1,5 @@
 #include "graphics.h"
 #include <stdlib.h>
-#include <stdio.h>
 #include <time.h>
 
 #define ROWS 15
@@ -9,7 +8,7 @@
 #define WINDOW_WIDTH (COLS * GRID_SIZE)
 #define WINDOW_HEIGHT (ROWS * GRID_SIZE)
 #define MARKER_COUNT 30
-#define DELAY 20
+#define DELAY 200
 #define TEST_COURSE 6  // Select test course (1-7)
 
 // Coverage Planner States
@@ -29,22 +28,12 @@ typedef enum {
     HEURISTIC_HORIZONTAL
 } HeuristicType;
 
-// Trajectory Node for path tracking
-typedef struct {
-    float cost;           // Accumulated cost
-    int x;               // Grid position
-    int y;
-    int orientation;     // 0=up, 1=right, 2=down, 3=left
-    int action_in;       // Action to get here (-1 for start)
-    int action_next;     // Next action to perform
-} TrajectoryNode;
-
 typedef struct {
         int x;
         int y;
         int direction; // 0: up, 1: right, 2: down, 3: left
         int markerCount;
-        int knowledge[ROWS][COLS]; // 0: unknown, 1: empty, 2: marker, 3: corner, -1: obstacle
+        int knowledge[ROWS][COLS]; // 0: unknown, 1: visited, 3: corner, -1: obstacle
 } Robot;
 
 typedef struct {
@@ -54,10 +43,6 @@ typedef struct {
 } Marker;
 
 // Action costs for coverage algorithm
-#define ACTION_RIGHT 0
-#define ACTION_FORWARD 1
-#define ACTION_LEFT 2
-#define ACTION_BACKWARD 3
 static const float action_costs[] = {0.2, 0.1, 0.2, 0.4}; // Right, Forward, Left, Backward
 
 // Movement directions: up, right, down, left (matches Robot direction encoding)
@@ -81,7 +66,7 @@ int markerCount(Robot robot);
 
 // Advanced robot functionalities that utilize core functions with added complexity to work
 void turnToDirection(Robot* robot, Marker markers[], int target_direction);
-void discoverCorner(Robot* robot, Marker markers[], int map[COLS][ROWS], int coverage_grid[COLS][ROWS]);
+void discoverCorner(Robot* robot, Marker markers[], int map[COLS][ROWS]);
 int checkAtCorner(Robot robot);
 
 // Test obstacle course configurations
@@ -96,11 +81,9 @@ void setupTestCourse7(int map[COLS][ROWS]); // Circular pattern
 // Coverage planning functions
 void performAction(Robot* robot, Marker markers[], int map[COLS][ROWS], int target_orientation);
 void createHeuristic(int target_x, int target_y, HeuristicType type, float heuristic[COLS][ROWS]);
-int checkFullCoverage(int map[COLS][ROWS], int closed[COLS][ROWS]);
 int coverageSearch(Robot* robot, Marker markers[], int map[COLS][ROWS], int closed[COLS][ROWS], float heuristic[COLS][ROWS]);
-int aStarSearchNearestUnvisited(Robot* robot, Marker markers[], int map[COLS][ROWS], int closed[COLS][ROWS], float heuristic[COLS][ROWS]);
+int aStarNavigate(Robot* robot, Marker markers[], int map[COLS][ROWS], int closed[COLS][ROWS], float heuristic[COLS][ROWS], int target_x, int target_y, int any_unvisited);
 int findNearestCorner(Robot robot, int* corner_x, int* corner_y);
-int navigateToCorner(Robot* robot, Marker markers[], int map[COLS][ROWS], int target_x, int target_y);
 
 int main(int argc, char const *argv[])
 {
@@ -141,7 +124,6 @@ int main(int argc, char const *argv[])
     }
 
     // Initialize coverage planning system
-    int coverage_grid[COLS][ROWS] = {0};  // Track visited cells
     float heuristic[COLS][ROWS];
     PlannerState state = COVERAGE_SEARCH;
 
@@ -161,7 +143,7 @@ int main(int argc, char const *argv[])
     while (state != FOUND && state != NOT_FOUND) {
         if (state == COVERAGE_SEARCH) {
             // Run coverage search algorithm
-            int success = coverageSearch(&robot, markers, map, coverage_grid, heuristic);
+            int success = coverageSearch(&robot, markers, map, robot.knowledge, heuristic);
             if (success) {
                 state = FOUND;
                 // Coverage complete
@@ -174,8 +156,8 @@ int main(int argc, char const *argv[])
             // Update heuristic for A* search from current position
             createHeuristic(robot.x, robot.y, HEURISTIC_MANHATTAN, heuristic);
 
-            // Run A* search to nearest unvisited cell
-            int found = aStarSearchNearestUnvisited(&robot, markers, map, coverage_grid, heuristic);
+            // Run A* search to nearest unvisited cell (any_unvisited=1)
+            int found = aStarNavigate(&robot, markers, map, robot.knowledge, heuristic, -1, -1, 1);
 
             if (found) {
                 // Successfully reached unvisited area, return to coverage search
@@ -190,14 +172,17 @@ int main(int argc, char const *argv[])
     }
     // After coverage complete, check if robot still has markers
     if (markerCount(robot) > 0) {
-
         // Find nearest discovered corner
         int corner_x, corner_y;
-        if (findNearestCorner(robot, &corner_x, &corner_y)) { // nearest corner found at corner_x, corner_y
-            if (navigateToCorner(&robot, markers, map, corner_x, corner_y)) { // Navigate to corner and drop markers
+        if (findNearestCorner(robot, &corner_x, &corner_y)) {
+            // Create heuristic to navigate to specific corner
+            float corner_heuristic[COLS][ROWS];
+            createHeuristic(corner_x, corner_y, HEURISTIC_MANHATTAN, corner_heuristic);
+
+            // Navigate to corner using A* (any_unvisited=0, specific target)
+            if (aStarNavigate(&robot, markers, map, robot.knowledge, corner_heuristic, corner_x, corner_y, 0)) {
                 if (checkAtCorner(robot)) {
                     dropMarker(&robot, markers, map);
-                    // All markers dropped at corner
                 }
             }
         }
@@ -375,15 +360,15 @@ int canMoveForward(Robot robot, int map[COLS][ROWS]){
 
 // Discover if current position is a corner (2 adjacent obstacles/edges in L-shape)
 // Robot physically turns to check each direction using only forward-facing sensor
-// Uses coverage_grid memory to avoid checking directions with previously visited cells
+// Uses robot.knowledge memory to avoid checking directions with previously visited cells
 // Updates robot knowledge map with corner information
 // Only performs check if this cell hasn't been analyzed yet (knowledge == 0)
-void discoverCorner(Robot* robot, Marker markers[], int map[COLS][ROWS], int coverage_grid[COLS][ROWS]) {
+void discoverCorner(Robot* robot, Marker markers[], int map[COLS][ROWS]) {
     int x = robot->x;
     int y = robot->y;
 
     // Skip if we've already analyzed this cell for corners
-    // knowledge values: 0=unknown, 1=empty, 2=marker, 3=corner
+    // knowledge values: 0=unknown, 1=empty, 2=marker, 3=corner, -1=obstacle
     if (robot->knowledge[x][y] != 0) {
         return;  // Already analyzed
     }
@@ -410,9 +395,11 @@ void discoverCorner(Robot* robot, Marker markers[], int map[COLS][ROWS], int cov
             continue;
         }
 
-        // If we've already visited that neighbor cell, we KNOW it's not blocked
-        // (we couldn't have visited it if it was an obstacle)
-        if (coverage_grid[nx][ny] == 1) {
+        // Check if we already know about this neighbor from robot's memory
+        if (robot->knowledge[nx][ny] == -1) {
+            blocked[dir] = 1;  // Known obstacle
+            continue;
+        } else if (robot->knowledge[nx][ny] == 1 || robot->knowledge[nx][ny] == 3) {
             blocked[dir] = 0;  // Already visited = definitely not blocked
             continue;
         }
@@ -426,6 +413,7 @@ void discoverCorner(Robot* robot, Marker markers[], int map[COLS][ROWS], int cov
         // Use forward-facing sensor to check if path is blocked
         if (!canMoveForward(*robot, map)) {
             blocked[dir] = 1;  // This direction is blocked (obstacle)
+            robot->knowledge[nx][ny] = -1;  // Remember this obstacle
         }
     }
 
@@ -514,19 +502,6 @@ void createHeuristic(int target_x, int target_y, HeuristicType type, float heuri
     }
 }
 
-// Check if all visitable positions have been visited
-int checkFullCoverage(int map[COLS][ROWS], int closed[COLS][ROWS]) {
-    for (int x = 0; x < COLS; x++) {
-        for (int y = 0; y < ROWS; y++) {
-            // If cell is free (0) and not visited, coverage incomplete
-            if (map[x][y] == 0 && closed[x][y] == 0) {
-                return 0;
-            }
-        }
-    }
-    return 1;
-}
-
 // Perform an action: right turn + forward, forward, left turn + forward, or 180° turn + forward
 // Perform action with target orientation
 // Note: After discoverCorner(), robot may be facing any direction
@@ -545,23 +520,17 @@ void performAction(Robot* robot, Marker markers[], int map[COLS][ROWS], int targ
 // Coverage search algorithm - greedy lawnmower pattern
 // Returns 1 if complete coverage achieved, 0 if stuck (need A* search)
 int coverageSearch(Robot* robot, Marker markers[], int map[COLS][ROWS], int closed[COLS][ROWS], float heuristic[COLS][ROWS]) {
-    // Mark starting position as visited
-    closed[robot->x][robot->y] = 1;
+    // Check if starting position is a corner (this will mark it as visited too)
+    discoverCorner(robot, markers, map);
 
-    // Check if starting position is a corner
-    discoverCorner(robot, markers, map, closed);
+    // If discoverCorner didn't mark it (shouldn't happen but safety check)
+    if (closed[robot->x][robot->y] == 0) {
+        closed[robot->x][robot->y] = 1;
+    }
 
-    int complete_coverage = 0;
     int resign = 0;
 
-    while (!complete_coverage && !resign) {
-        // Check if coverage is complete
-        if (checkFullCoverage(map, closed)) {
-            complete_coverage = 1;
-            // Coverage complete
-            break;
-        }
-
+    while (!resign) {
         // Get current position
         int x = robot->x;
         int y = robot->y;
@@ -580,23 +549,21 @@ int coverageSearch(Robot* robot, Marker markers[], int map[COLS][ROWS], int clos
         int candidate_count = 0;
 
         // Evaluate all 4 possible actions
+        // Action -> orientation change: RIGHT=+1, FORWARD=+0, LEFT=+3(-1), BACKWARD=+2(180°)
+        static const int orientation_changes[] = {1, 0, 3, 2};
+
         for (int a = 0; a < 4; a++) {
             // Calculate new orientation after action
-            int o2;
-            switch (a) {
-                case ACTION_RIGHT:   o2 = (o + 1) % 4; break;
-                case ACTION_FORWARD: o2 = o; break;
-                case ACTION_LEFT:    o2 = (o + 3) % 4; break;
-                case ACTION_BACKWARD: o2 = (o + 2) % 4; break;
-            }
+            int o2 = (o + orientation_changes[a]) % 4;
 
             // Calculate new position
             int x2 = x + movement[o2][0];
             int y2 = y + movement[o2][1];
 
-            // Check if valid move: in bounds, not obstacle, not visited
+            // Check if valid move: in bounds, not known obstacle, not visited
             if (x2 >= 0 && x2 < COLS && y2 >= 0 && y2 < ROWS) {
-                if (map[x2][y2] != -1 && closed[x2][y2] == 0) {
+                // Only check robot's knowledge: 0=unknown(safe to explore), avoid -1=obstacle or visited cells
+                if (closed[x2][y2] == 0) {
                     // Calculate cost: accumulated + action_cost + heuristic
                     float v2 = v + action_costs[a] + heuristic[x2][y2];
 
@@ -625,11 +592,13 @@ int coverageSearch(Robot* robot, Marker markers[], int map[COLS][ROWS], int clos
             // This handles the case where discoverCorner() left the robot facing any direction
             performAction(robot, markers, map, possible_next[best_idx].orientation);
 
-            // Mark new position as visited
-            closed[robot->x][robot->y] = 1;
+            // Discover if this position is a corner (this will mark it as visited: 1 or corner: 3)
+            discoverCorner(robot, markers, map);
 
-            // Discover if this position is a corner (uses memory to minimize sensor checks)
-            discoverCorner(robot, markers, map, closed);
+            // Safety: If discoverCorner didn't mark it, mark as visited
+            if (closed[robot->x][robot->y] == 0) {
+                closed[robot->x][robot->y] = 1;
+            }
 
             // If robot is carrying markers and just discovered it's at a corner, drop them immediately
             if (markerCount(*robot) > 0 && checkAtCorner(*robot)) {
@@ -639,12 +608,18 @@ int coverageSearch(Robot* robot, Marker markers[], int map[COLS][ROWS], int clos
         }
     }
 
-    return complete_coverage;
+    // Coverage search completed (either found all reachable cells or resigned)
+    return 0; // Resigned - need A* to find unvisited cells
 }
 
 // A* search to find nearest unvisited cell
 // Returns 1 if path found, 0 if no unvisited cells reachable
-int aStarSearchNearestUnvisited(Robot* robot, Marker markers[], int map[COLS][ROWS], int closed[COLS][ROWS], float heuristic[COLS][ROWS]) {
+// Generic A* navigation function
+// If any_unvisited=1: finds ANY unvisited cell (uses closed grid to check)
+// If any_unvisited=0: navigates to specific (target_x, target_y)
+// Returns 1 if path found and executed, 0 if failed
+int aStarNavigate(Robot* robot, Marker markers[], int map[COLS][ROWS], int closed[COLS][ROWS], float heuristic[COLS][ROWS],
+                  int target_x, int target_y, int any_unvisited) {
     // Search-specific closed grid (different from coverage closed)
     int search_closed[COLS][ROWS] = {0};
     search_closed[robot->x][robot->y] = 1;
@@ -707,13 +682,23 @@ int aStarSearchNearestUnvisited(Robot* robot, Marker markers[], int map[COLS][RO
         int y = current.y;
         float g = current.g;
 
-        // Check if we found an unvisited cell
-        if (closed[x][y] == 0) {
-            found = 1;
-            goal_x = x;
-            goal_y = y;
-            // A* found unvisited cell
-            break;
+        // Check if we reached goal
+        if (any_unvisited) {
+            // Looking for ANY unvisited cell
+            if (closed[x][y] == 0) {
+                found = 1;
+                goal_x = x;
+                goal_y = y;
+                break;
+            }
+        } else {
+            // Looking for specific target
+            if (x == target_x && y == target_y) {
+                found = 1;
+                goal_x = x;
+                goal_y = y;
+                break;
+            }
         }
 
         // Expand neighbors in all 4 directions
@@ -721,9 +706,9 @@ int aStarSearchNearestUnvisited(Robot* robot, Marker markers[], int map[COLS][RO
             int x_next = x + movement[i][0];
             int y_next = y + movement[i][1];
 
-            // Check bounds and validity
+            // Check bounds and validity (use robot's knowledge, not ground truth map)
             if (x_next >= 0 && x_next < COLS && y_next >= 0 && y_next < ROWS) {
-                if (map[x_next][y_next] != -1 && search_closed[x_next][y_next] == 0) {
+                if (closed[x_next][y_next] != -1 && search_closed[x_next][y_next] == 0) {
                     float g2 = g + 1.0;  // Standard A* movement cost
                     float f2 = g2 + heuristic[x_next][y_next];
 
@@ -744,7 +729,7 @@ int aStarSearchNearestUnvisited(Robot* robot, Marker markers[], int map[COLS][RO
     }
 
     if (!found) {
-        // No unvisited cells reachable
+        // No path found
         return 0;
     }
 
@@ -779,19 +764,17 @@ int aStarSearchNearestUnvisited(Robot* robot, Marker markers[], int map[COLS][RO
 
     // Execute path
     for (int i = 0; i < path_len; i++) {
-        int target_x = path_x[i];
-        int target_y = path_y[i];
+        int target_x_step = path_x[i];
+        int target_y_step = path_y[i];
 
         // Find direction to target
         for (int dir = 0; dir < 4; dir++) {
             int next_x = robot->x + movement[dir][0];
             int next_y = robot->y + movement[dir][1];
 
-            if (next_x == target_x && next_y == target_y) {
+            if (next_x == target_x_step && next_y == target_y_step) {
                 // Turn to face target direction
-                while (robot->direction != dir) {
-                    right(robot, markers);
-                }
+                turnToDirection(robot, markers, dir);
                 // Move forward
                 if (canMoveForward(*robot, map)) {
                     forward(robot, markers, map);
@@ -827,162 +810,6 @@ int findNearestCorner(Robot robot, int* corner_x, int* corner_y) {
     }
 
     return found;
-}
-
-// Navigate to a specific corner using A* pathfinding
-// Returns 1 if successfully reached corner, 0 if failed
-int navigateToCorner(Robot* robot, Marker markers[], int map[COLS][ROWS], int target_x, int target_y) {
-    // Navigating to nearest corner to drop markers...
-
-    // Create heuristic for A* to specific corner
-    float heuristic[COLS][ROWS];
-    createHeuristic(target_x, target_y, HEURISTIC_MANHATTAN, heuristic);
-
-    // A* search closed grid (different from coverage)
-    int search_closed[COLS][ROWS] = {0};
-    search_closed[robot->x][robot->y] = 1;
-
-    // Parent tracking for path reconstruction
-    int parent_x[COLS][ROWS];
-    int parent_y[COLS][ROWS];
-    int parent_dir[COLS][ROWS];
-
-    for (int i = 0; i < COLS; i++) {
-        for (int j = 0; j < ROWS; j++) {
-            parent_x[i][j] = -1;
-            parent_y[i][j] = -1;
-            parent_dir[i][j] = -1;
-        }
-    }
-
-    // Open list
-    typedef struct {
-        float f;
-        float g;
-        int x;
-        int y;
-    } OpenNode;
-
-    OpenNode open_list[COLS * ROWS];
-    int open_count = 0;
-
-    // Add start
-    float g = 0;
-    float f = g + heuristic[robot->x][robot->y];
-    open_list[open_count].f = f;
-    open_list[open_count].g = g;
-    open_list[open_count].x = robot->x;
-    open_list[open_count].y = robot->y;
-    open_count++;
-    parent_dir[robot->x][robot->y] = robot->direction;
-
-    int found = 0;
-
-    while (!found && open_count > 0) {
-        // Find lowest f
-        int best_idx = 0;
-        for (int i = 1; i < open_count; i++) {
-            if (open_list[i].f < open_list[best_idx].f) {
-                best_idx = i;
-            }
-        }
-
-        OpenNode current = open_list[best_idx];
-        open_list[best_idx] = open_list[open_count - 1];
-        open_count--;
-
-        int x = current.x;
-        int y = current.y;
-        float g = current.g;
-
-        // Check if reached target corner
-        if (x == target_x && y == target_y) {
-            found = 1;
-            break;
-        }
-
-        // Expand neighbors
-        for (int i = 0; i < 4; i++) {
-            int x_next = x + movement[i][0];
-            int y_next = y + movement[i][1];
-
-            if (x_next >= 0 && x_next < COLS && y_next >= 0 && y_next < ROWS) {
-                if (map[x_next][y_next] != -1 && search_closed[x_next][y_next] == 0) {
-                    float g2 = g + 1.0;
-                    float f2 = g2 + heuristic[x_next][y_next];
-
-                    open_list[open_count].f = f2;
-                    open_list[open_count].g = g2;
-                    open_list[open_count].x = x_next;
-                    open_list[open_count].y = y_next;
-                    open_count++;
-
-                    search_closed[x_next][y_next] = 1;
-                    parent_x[x_next][y_next] = x;
-                    parent_y[x_next][y_next] = y;
-                    parent_dir[x_next][y_next] = i;
-                }
-            }
-        }
-    }
-
-    if (!found) {
-        // Failed to reach corner
-        return 0;
-    }
-
-    // Reconstruct and execute path
-    int path_x[COLS * ROWS];
-    int path_y[COLS * ROWS];
-    int path_len = 0;
-
-    int cx = target_x;
-    int cy = target_y;
-
-    while (!(cx == robot->x && cy == robot->y)) {
-        path_x[path_len] = cx;
-        path_y[path_len] = cy;
-        path_len++;
-
-        int px = parent_x[cx][cy];
-        int py = parent_y[cx][cy];
-        cx = px;
-        cy = py;
-    }
-
-    // Reverse path
-    for (int i = 0; i < path_len / 2; i++) {
-        int temp_x = path_x[i];
-        int temp_y = path_y[i];
-        path_x[i] = path_x[path_len - 1 - i];
-        path_y[i] = path_y[path_len - 1 - i];
-        path_x[path_len - 1 - i] = temp_x;
-        path_y[path_len - 1 - i] = temp_y;
-    }
-
-    // Execute path
-    for (int i = 0; i < path_len; i++) {
-        int target_x_step = path_x[i];
-        int target_y_step = path_y[i];
-
-        for (int dir = 0; dir < 4; dir++) {
-            int next_x = robot->x + movement[dir][0];
-            int next_y = robot->y + movement[dir][1];
-
-            if (next_x == target_x_step && next_y == target_y_step) {
-                while (robot->direction != dir) {
-                    right(robot, markers);
-                }
-                if (canMoveForward(*robot, map)) {
-                    forward(robot, markers, map);
-                }
-                break;
-            }
-        }
-    }
-
-    // Reached corner
-    return 1;
 }
 
 // ========== TEST OBSTACLE COURSES ==========
