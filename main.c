@@ -11,40 +11,40 @@
 #define MARKER_COUNT 5
 #define DELAY 50
 
-struct Robot {
+typedef struct Robot {
         int x;
         int y;
         int direction; // 0: up, 1: right, 2: down, 3: left
         int markerCount;
-};
+} Robot;
 
-struct Marker {
+typedef struct Marker {
     int x;
     int y;
     int isCarried;
-};
+} Marker;
 
 void drawArena();
-void drawMarkers(struct Marker markers[]);
+void drawMarkers(Marker markers[]);
 
-void drawRobot(struct Robot robot);
-void forward(struct Robot* robot, struct Marker markers[], int markerMap[COLS][ROWS]);
-void left(struct Robot* robot, struct Marker markers[]);
-void right(struct Robot* robot, struct Marker markers[]);
-int canMoveForward(struct Robot robot, int markerMap[COLS][ROWS]);
-int atMarker(struct Robot* robot, struct Marker markers[], int markerMap[COLS][ROWS]);
-void pickUpMarker(struct Robot* robot,struct Marker* marker, int markerMap[COLS][ROWS]);
-void dropMarker(struct Robot* robot, struct Marker markers[], int markerMap[COLS][ROWS]);
-int checkAtCorner(struct Robot robot); // gotta change the implementation of corner checks, robot shouldn't know the arena borders beforehand.
-int markerCount(struct Robot robot);
-void drawMovingObjects(struct Robot robot, struct Marker markers[]);
+void drawRobot(Robot robot);
+void forward(Robot* robot, Marker markers[], int markerMap[COLS][ROWS]);
+void left(Robot* robot, Marker markers[]);
+void right(Robot* robot, Marker markers[]);
+int canMoveForward(Robot robot, int markerMap[COLS][ROWS]);
+int atMarker(Robot* robot, Marker markers[], int markerMap[COLS][ROWS]);
+void pickUpMarker(Robot* robot, Marker* marker, int markerMap[COLS][ROWS]);
+void dropMarker(Robot* robot, Marker markers[], int markerMap[COLS][ROWS]);
+int checkAtCorner(Robot robot); // gotta change the implementation of corner checks, robot shouldn't know the arena borders beforehand.
+int markerCount(Robot robot);
+void drawMovingObjects(Robot robot, Marker markers[]);
 
 int main(int argc, char const *argv[])
 {
     srand(time(NULL));  // random seed generator
-    
-    struct Robot robot = {rand() % COLS, rand() % ROWS, 0}; //position in terms of grid coordinates, not pixels
-    struct Marker markers[MARKER_COUNT];
+
+    Robot robot = {rand() % COLS, rand() % ROWS, 0}; //position in terms of grid coordinates, not pixels
+    Marker markers[MARKER_COUNT];
     int markerMap[COLS][ROWS] = {0}; // 0 = empty, the rest are marker index + 1, this 2D array is only for marker location checks
     for (int i = 0; i < MARKER_COUNT; i++) {
         int x = rand() % COLS;
@@ -122,14 +122,14 @@ void drawArena(){
     }
 }
 
-void drawMarkers(struct Marker markers[]){
+void drawMarkers(Marker markers[]){
     setColour(gray);
     for (int i = 0; i < MARKER_COUNT; i++) {
         fillArc(markers[i].x * GRID_SIZE + GRID_SIZE / 4, markers[i].y * GRID_SIZE + GRID_SIZE / 4, GRID_SIZE / 2, GRID_SIZE / 2, 0, 360);
     }
 }
 
-void drawRobot(struct Robot robot){
+void drawRobot(Robot robot){
     //triangle representing the robot
     setColour(blue);
     int centerX = robot.x * GRID_SIZE + GRID_SIZE / 2;
@@ -168,14 +168,14 @@ void drawRobot(struct Robot robot){
     }
 }
 
-void drawMovingObjects(struct Robot robot, struct Marker markers[]){
+void drawMovingObjects(Robot robot, Marker markers[]){
     clear(); // everytime there's a movement, update the elements that moved
     drawRobot(robot);
     drawMarkers(markers);
     sleep(DELAY);
 }
 
-void forward(struct Robot* robot, struct Marker markers[], int markerMap[COLS][ROWS]){
+void forward(Robot* robot, Marker markers[], int markerMap[COLS][ROWS]){
     switch (robot->direction){
         case 0: //up
             robot->y -= 1;
@@ -205,16 +205,16 @@ void forward(struct Robot* robot, struct Marker markers[], int markerMap[COLS][R
     drawMovingObjects(*robot, markers);
 }
 
-void left(struct Robot* robot, struct Marker markers[]){
+void left(Robot* robot, Marker markers[]){
     robot->direction = (robot->direction + 3) % 4; //turn left (suggestion made by github copilot, modulo loop)
     drawMovingObjects(*robot, markers);
 }
-void right(struct Robot* robot, struct Marker markers[]){
+void right(Robot* robot, Marker markers[]){
     robot->direction = (robot->direction + 1) % 4; //turn right (suggestion made by github copilot, modulo loop)
     drawMovingObjects(*robot, markers);
 }
 
-int canMoveForward(struct Robot robot, int markerMap[COLS][ROWS]){
+int canMoveForward(Robot robot, int markerMap[COLS][ROWS]){
     switch (robot.direction){
         case 0: //up
             return robot.y != 0;
@@ -228,31 +228,31 @@ int canMoveForward(struct Robot robot, int markerMap[COLS][ROWS]){
     return 0;
 }
 
-int checkAtCorner(struct Robot robot){
+int checkAtCorner(Robot robot){
     return (robot.x == 0 && robot.y == 0) ||
     (robot.x == COLS - 1 && robot.y == 0) ||
     (robot.x == 0 && robot.y == ROWS - 1) ||
     (robot.x == COLS - 1 && robot.y == ROWS - 1);
 }
 
-int markerCount(struct Robot robot){
+int markerCount(Robot robot){
     return robot.markerCount;
 }
 
-int atMarker(struct Robot* robot, struct Marker markers[], int markerMap[COLS][ROWS]){
+int atMarker(Robot* robot, Marker markers[], int markerMap[COLS][ROWS]){
     if (markerMap[robot->x][robot->y] > 0 && !checkAtCorner(*robot)) { // markerMap[robot->x][robot->y] > 0 means there's a marker
         return 1;
     }
     return 0;
 }
 
-void pickUpMarker(struct Robot* robot, struct Marker* marker, int markerMap[COLS][ROWS]) {
+void pickUpMarker(Robot* robot, Marker* marker, int markerMap[COLS][ROWS]) {
     marker->isCarried = 1;
     robot->markerCount += 1;
     markerMap[marker->x][marker->y] = 0; // Remove marker from markerMap
 }
 
-void dropMarker(struct Robot* robot, struct Marker markers[], int markerMap[COLS][ROWS]){
+void dropMarker(Robot* robot, Marker markers[], int markerMap[COLS][ROWS]){
     for (int i = 0; i < MARKER_COUNT; i++) { // this function gets called when the robot is at the corner and has at least one marker, and the function drops all the markers
         if (markers[i].isCarried) {
             markers[i].isCarried = 0;
