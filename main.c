@@ -271,7 +271,7 @@ void dropMarker(Robot* robot, Marker markers[], int map[COLS][ROWS]){
         if (markers[i].isCarried) {
             markers[i].isCarried = 0;
             robot->markerCount -= 1;
-            map[markers[i].x][markers[i].y] = i + 1; // Store marker index + 1 back in the map
+            // markers are dropped in a corner and now inactive (mission accomplished), so we don't need to put it back in the map
         }
     }
 }
