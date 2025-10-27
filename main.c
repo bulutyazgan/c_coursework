@@ -8,9 +8,9 @@
 #define GRID_SIZE 40
 #define WINDOW_WIDTH (COLS * GRID_SIZE)
 #define WINDOW_HEIGHT (ROWS * GRID_SIZE)
-#define MARKER_COUNT 15
-#define DELAY 300
-#define TEST_COURSE 5  // Select test course (1-7)
+#define MARKER_COUNT 30
+#define DELAY 20
+#define TEST_COURSE 6  // Select test course (1-7)
 
 // Coverage Planner States
 typedef enum {
@@ -145,7 +145,7 @@ int main(int argc, char const *argv[])
     float heuristic[COLS][ROWS];
     PlannerState state = COVERAGE_SEARCH;
 
-    // Create heuristic (VERTICAL recommended for 10x10 grids based on Python testing)
+    // Create heuristic
     createHeuristic(robot.x, robot.y, HEURISTIC_VERTICAL, heuristic);
 
     setWindowSize(WINDOW_WIDTH + 1, WINDOW_HEIGHT + 1);
@@ -157,31 +157,14 @@ int main(int argc, char const *argv[])
     drawRobot(robot);
     drawMarkers(markers);
 
-    // Display test course info
-    char course_msg[100];
-    const char* course_names[] = {
-        "",
-        "Test Course 1: Empty Arena",
-        "Test Course 2: Corner Obstacles",
-        "Test Course 3: Central Wall",
-        "Test Course 4: Maze Pattern",
-        "Test Course 5: Scattered Obstacles",
-        "Test Course 6: U-Shape Corridor",
-        "Test Course 7: Circular Pattern"
-    };
-    sprintf(course_msg, "%s", course_names[TEST_COURSE]);
-    message(course_msg);
-    message("Starting coverage path planning...");
-
     // Finite State Machine for coverage planning
     while (state != FOUND && state != NOT_FOUND) {
         if (state == COVERAGE_SEARCH) {
             // Run coverage search algorithm
             int success = coverageSearch(&robot, markers, map, coverage_grid, heuristic);
-
             if (success) {
                 state = FOUND;
-                message("Complete coverage achieved!");
+                // Coverage complete
             } else {
                 // Coverage search got stuck, try A* to find nearest unvisited
                 state = NEAREST_UNVISITED_SEARCH;
@@ -202,40 +185,25 @@ int main(int argc, char const *argv[])
             } else {
                 // No unvisited cells reachable
                 state = NOT_FOUND;
-                message("Coverage incomplete - some areas unreachable");
             }
         }
     }
-
     // After coverage complete, check if robot still has markers
     if (markerCount(robot) > 0) {
-        char msg[100];
-        sprintf(msg, "Coverage complete but robot still carrying %d marker(s)", markerCount(robot));
-        message(msg);
 
         // Find nearest discovered corner
         int corner_x, corner_y;
-        if (findNearestCorner(robot, &corner_x, &corner_y)) {
-            sprintf(msg, "Nearest corner found at (%d, %d)", corner_x, corner_y);
-            message(msg);
-
-            // Navigate to corner and drop markers
-            if (navigateToCorner(&robot, markers, map, corner_x, corner_y)) {
-                // Drop markers at corner
+        if (findNearestCorner(robot, &corner_x, &corner_y)) { // nearest corner found at corner_x, corner_y
+            if (navigateToCorner(&robot, markers, map, corner_x, corner_y)) { // Navigate to corner and drop markers
                 if (checkAtCorner(robot)) {
                     dropMarker(&robot, markers, map);
-                    message("All markers dropped at corner!");
-                } else {
-                    message("Warning: Not at corner after navigation");
+                    // All markers dropped at corner
                 }
             }
-        } else {
-            message("Warning: No corners discovered to drop markers");
         }
     }
-
+    // Algorithm complete
     // Keep display active after completion
-    message("Algorithm finished. Close window to exit.");
     while (1) {
         sleep(1000);
     }
@@ -590,7 +558,7 @@ int coverageSearch(Robot* robot, Marker markers[], int map[COLS][ROWS], int clos
         // Check if coverage is complete
         if (checkFullCoverage(map, closed)) {
             complete_coverage = 1;
-            message("Coverage complete!");
+            // Coverage complete
             break;
         }
 
@@ -641,10 +609,9 @@ int coverageSearch(Robot* robot, Marker markers[], int map[COLS][ROWS], int clos
             }
         }
 
-        // If no candidates, resign (need A* search)
         if (candidate_count == 0) {
             resign = 1;
-            message("Coverage search stuck, need A*");
+            // Coverage search stuck, need A* search
         } else {
             // Find candidate with lowest cost
             int best_idx = 0;
@@ -667,7 +634,7 @@ int coverageSearch(Robot* robot, Marker markers[], int map[COLS][ROWS], int clos
             // If robot is carrying markers and just discovered it's at a corner, drop them immediately
             if (markerCount(*robot) > 0 && checkAtCorner(*robot)) {
                 dropMarker(robot, markers, map);
-                message("Dropped markers at corner during traversal");
+                // Markers dropped at corner
             }
         }
     }
@@ -745,7 +712,7 @@ int aStarSearchNearestUnvisited(Robot* robot, Marker markers[], int map[COLS][RO
             found = 1;
             goal_x = x;
             goal_y = y;
-            message("A* found unvisited cell");
+            // A* found unvisited cell
             break;
         }
 
@@ -777,7 +744,7 @@ int aStarSearchNearestUnvisited(Robot* robot, Marker markers[], int map[COLS][RO
     }
 
     if (!found) {
-        message("A* failed - no unvisited cells reachable");
+        // No unvisited cells reachable
         return 0;
     }
 
@@ -865,7 +832,7 @@ int findNearestCorner(Robot robot, int* corner_x, int* corner_y) {
 // Navigate to a specific corner using A* pathfinding
 // Returns 1 if successfully reached corner, 0 if failed
 int navigateToCorner(Robot* robot, Marker markers[], int map[COLS][ROWS], int target_x, int target_y) {
-    message("Navigating to nearest corner to drop markers...");
+    // Navigating to nearest corner to drop markers...
 
     // Create heuristic for A* to specific corner
     float heuristic[COLS][ROWS];
@@ -960,7 +927,7 @@ int navigateToCorner(Robot* robot, Marker markers[], int map[COLS][ROWS], int ta
     }
 
     if (!found) {
-        message("Failed to reach corner!");
+        // Failed to reach corner
         return 0;
     }
 
@@ -1014,7 +981,7 @@ int navigateToCorner(Robot* robot, Marker markers[], int map[COLS][ROWS], int ta
         }
     }
 
-    message("Reached corner!");
+    // Reached corner
     return 1;
 }
 
