@@ -3,8 +3,8 @@
 #include <stdio.h>
 #include <time.h>
 
-#define ROWS 15
-#define COLS 15
+#define ROWS 10
+#define COLS 10
 #define GRID_SIZE 40
 #define WINDOW_WIDTH (COLS * GRID_SIZE)
 #define WINDOW_HEIGHT (ROWS * GRID_SIZE)
@@ -45,10 +45,14 @@ int main(int argc, char const *argv[])
 
     Robot robot = {rand() % COLS, rand() % ROWS, 0}; //position in terms of grid coordinates, not pixels
     Marker markers[MARKER_COUNT];
-    int markerMap[COLS][ROWS] = {0}; // 0 = empty, the rest are marker index + 1, this 2D array is only for marker location checks
+    int markerMap[COLS][ROWS] = {0}; // 0 = empty, bigger than 0: marker index + 1, -1: obstacle, this 2D array is for targeted location checks
     for (int i = 0; i < MARKER_COUNT; i++) {
         int x = rand() % COLS;
         int y = rand() % ROWS;
+        while ((markerMap[x][y] != 0) || (x == robot.x && y == robot.y)) { // ensure no overlapping markers and not on robot's starting position
+            x = rand() % COLS;
+            y = rand() % ROWS;
+        }
         markers[i].x = x;
         markers[i].y = y;
         markers[i].isCarried = 0;
