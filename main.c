@@ -8,8 +8,8 @@
 #define WINDOW_WIDTH (COLS * GRID_SIZE)
 #define WINDOW_HEIGHT (ROWS * GRID_SIZE)
 #define MARKER_COUNT 30
-#define DELAY 200
-#define TEST_COURSE 6  // Select test course (1-7)
+#define DELAY 30
+#define TEST_COURSE 5  // Select test course (1-7)
 
 // Coverage Planner States
 typedef enum {
