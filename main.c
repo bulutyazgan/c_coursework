@@ -16,6 +16,7 @@ typedef struct Robot {
         int y;
         int direction; // 0: up, 1: right, 2: down, 3: left
         int markerCount;
+        int knowledge[ROWS][COLS]; // 0: unknown, 1: empty, 2: marker, 3: corner, -1: obstacle
 } Robot;
 
 typedef struct Marker {
@@ -28,13 +29,13 @@ void drawArena();
 void drawMarkers(Marker markers[]);
 
 void drawRobot(Robot robot);
-void forward(Robot* robot, Marker markers[], int markerMap[COLS][ROWS]);
+void forward(Robot* robot, Marker markers[], int map[COLS][ROWS]);
 void left(Robot* robot, Marker markers[]);
 void right(Robot* robot, Marker markers[]);
-int canMoveForward(Robot robot, int markerMap[COLS][ROWS]);
-int atMarker(Robot* robot, Marker markers[], int markerMap[COLS][ROWS]);
-void pickUpMarker(Robot* robot, Marker* marker, int markerMap[COLS][ROWS]);
-void dropMarker(Robot* robot, Marker markers[], int markerMap[COLS][ROWS]);
+int canMoveForward(Robot robot, int map[COLS][ROWS]);
+int atMarker(Robot* robot, Marker markers[], int map[COLS][ROWS]);
+void pickUpMarker(Robot* robot, Marker* marker, int map[COLS][ROWS]);
+void dropMarker(Robot* robot, Marker markers[], int map[COLS][ROWS]);
 int checkAtCorner(Robot robot); // gotta change the implementation of corner checks, robot shouldn't know the arena borders beforehand.
 int markerCount(Robot robot);
 void drawMovingObjects(Robot robot, Marker markers[]);
@@ -43,20 +44,27 @@ int main(int argc, char const *argv[])
 {
     srand(time(NULL));  // random seed generator
 
-    Robot robot = {rand() % COLS, rand() % ROWS, 0}; //position in terms of grid coordinates, not pixels
+    Robot robot = {rand() % COLS, rand() % ROWS, 0, 0, {{0}}}; //position in terms of grid coordinates, not pixels
+
+    // temporary knowledge for debugging/testing purposes
+    robot.knowledge[0][0] = 3;
+    robot.knowledge[0][COLS - 1] = 3;
+    robot.knowledge[ROWS - 1][0] = 3;
+    robot.knowledge[ROWS - 1][COLS - 1] = 3;
+
     Marker markers[MARKER_COUNT];
-    int markerMap[COLS][ROWS] = {0}; // 0 = empty, bigger than 0: marker index + 1, -1: obstacle, this 2D array is for targeted location checks
+    int map[COLS][ROWS] = {0}; // 0 = empty, bigger than 0: marker index + 1, -1: obstacle, this 2D array is for targeted location checks
     for (int i = 0; i < MARKER_COUNT; i++) {
         int x = rand() % COLS;
         int y = rand() % ROWS;
-        while ((markerMap[x][y] != 0) || (x == robot.x && y == robot.y)) { // ensure no overlapping markers and not on robot's starting position
+        while ((map[x][y] != 0) || (x == robot.x && y == robot.y)) { // ensure no overlapping markers and not on robot's starting position
             x = rand() % COLS;
             y = rand() % ROWS;
         }
         markers[i].x = x;
         markers[i].y = y;
         markers[i].isCarried = 0;
-        markerMap[x][y] = i + 1; // Store marker index + 1 (so 0 means empty)
+        map[x][y] = i + 1; // Store marker index + 1 (so 0 means empty)
     }
 
     setWindowSize(WINDOW_WIDTH + 1, WINDOW_HEIGHT + 1);
@@ -70,30 +78,30 @@ int main(int argc, char const *argv[])
     while (1){
 
         // robot mechanics
-        if (canMoveForward(robot, markerMap)){
-            forward(&robot, markers, markerMap);
+        if (canMoveForward(robot, map)){
+            forward(&robot, markers, map);
         }
         else{
             if (checkAtCorner(robot))
             {
                 right(&robot, markers);
-                if (robot.direction % 4 == 1 && canMoveForward(robot, markerMap)){
-                    forward(&robot, markers, markerMap);
+                if (robot.direction % 4 == 1 && canMoveForward(robot, map)){
+                    forward(&robot, markers, map);
                     right(&robot, markers);
                 }
             }
             else if (robot.direction % 4 == 0){
                 right(&robot, markers);
-                if (canMoveForward(robot, markerMap)){
-                    forward(&robot, markers, markerMap);
+                if (canMoveForward(robot, map)){
+                    forward(&robot, markers, map);
                 }
                 right(&robot, markers);
             }
             else if (robot.direction % 4 == 2){
                 left(&robot, markers);
-                if (canMoveForward(robot, markerMap))
+                if (canMoveForward(robot, map))
                 {
-                    forward(&robot, markers, markerMap);
+                    forward(&robot, markers, map);
                 }
                 left(&robot, markers);
             }
@@ -179,7 +187,7 @@ void drawMovingObjects(Robot robot, Marker markers[]){
     sleep(DELAY);
 }
 
-void forward(Robot* robot, Marker markers[], int markerMap[COLS][ROWS]){
+void forward(Robot* robot, Marker markers[], int map[COLS][ROWS]){
     switch (robot->direction){
         case 0: //up
             robot->y -= 1;
@@ -200,12 +208,14 @@ void forward(Robot* robot, Marker markers[], int markerMap[COLS][ROWS]){
             markers[i].y = robot->y;
         }
     }
-    if (atMarker(robot, markers, markerMap)){ //check if robot is at a marker after moving
-        pickUpMarker(robot, &markers[markerMap[robot->x][robot->y] - 1], markerMap); // deduct 1 to get the correct index
+
+    if (atMarker(robot, markers, map)){ //check if robot is at a marker after moving
+        pickUpMarker(robot, &markers[map[robot->x][robot->y] - 1], map); // deduct 1 to get the correct index
     }
-    if (markerCount(*robot) > 0 && checkAtCorner(*robot)) {
-        dropMarker(robot, markers, markerMap);
+    if (markerCount(*robot) > 0 && checkAtCorner(*robot)) { // if robot has at least one marker and is at a corner, drop all markers
+        dropMarker(robot, markers, map);
     }
+
     drawMovingObjects(*robot, markers);
 }
 
@@ -218,50 +228,50 @@ void right(Robot* robot, Marker markers[]){
     drawMovingObjects(*robot, markers);
 }
 
-int canMoveForward(Robot robot, int markerMap[COLS][ROWS]){
+int canMoveForward(Robot robot, int map[COLS][ROWS]){
     switch (robot.direction){
         case 0: //up
-            return robot.y != 0;
+            return robot.y != 0 && map[robot.x][robot.y - 1] != -1;
         case 1: //right
-            return robot.x != COLS - 1;
+            return robot.x != COLS - 1 && map[robot.x + 1][robot.y] != -1;
         case 2: //down
-            return robot.y != ROWS - 1;
+            return robot.y != ROWS - 1 && map[robot.x][robot.y + 1] != -1;
         case 3: //left
-            return robot.x != 0;
+            return robot.x != 0 && map[robot.x - 1][robot.y] != -1;
     }
     return 0;
 }
 
 int checkAtCorner(Robot robot){
-    return (robot.x == 0 && robot.y == 0) ||
-    (robot.x == COLS - 1 && robot.y == 0) ||
-    (robot.x == 0 && robot.y == ROWS - 1) ||
-    (robot.x == COLS - 1 && robot.y == ROWS - 1);
+    if (robot.knowledge[robot.x][robot.y] == 3) {
+        return 1;
+    }
+    return 0;
 }
 
 int markerCount(Robot robot){
     return robot.markerCount;
 }
 
-int atMarker(Robot* robot, Marker markers[], int markerMap[COLS][ROWS]){
-    if (markerMap[robot->x][robot->y] > 0 && !checkAtCorner(*robot)) { // markerMap[robot->x][robot->y] > 0 means there's a marker
+int atMarker(Robot* robot, Marker markers[], int map[COLS][ROWS]){
+    if (map[robot->x][robot->y] > 0) { // map[robot->x][robot->y] > 0 means there's a marker
         return 1;
     }
     return 0;
 }
 
-void pickUpMarker(Robot* robot, Marker* marker, int markerMap[COLS][ROWS]) {
+void pickUpMarker(Robot* robot, Marker* marker, int map[COLS][ROWS]) {
     marker->isCarried = 1;
     robot->markerCount += 1;
-    markerMap[marker->x][marker->y] = 0; // Remove marker from markerMap
+    map[marker->x][marker->y] = 0; // Remove marker from map
 }
 
-void dropMarker(Robot* robot, Marker markers[], int markerMap[COLS][ROWS]){
+void dropMarker(Robot* robot, Marker markers[], int map[COLS][ROWS]){
     for (int i = 0; i < MARKER_COUNT; i++) { // this function gets called when the robot is at the corner and has at least one marker, and the function drops all the markers
         if (markers[i].isCarried) {
             markers[i].isCarried = 0;
             robot->markerCount -= 1;
-            markerMap[markers[i].x][markers[i].y] = i + 1; // Store marker index + 1 back in the map
+            map[markers[i].x][markers[i].y] = i + 1; // Store marker index + 1 back in the map
         }
     }
 }
