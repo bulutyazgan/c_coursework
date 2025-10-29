@@ -8,8 +8,8 @@
 #define WINDOW_WIDTH (COLS * GRID_SIZE)
 #define WINDOW_HEIGHT (ROWS * GRID_SIZE)
 #define MARKER_COUNT 30
-#define DELAY 30
-#define TEST_COURSE 5  // Select test course (1-7)
+#define DELAY 20
+#define TEST_COURSE 3  // Select test course (1-7)
 
 // Coverage Planner States
 typedef enum {
@@ -23,7 +23,6 @@ typedef enum {
 // Heuristic Types
 typedef enum {
     HEURISTIC_MANHATTAN,
-    HEURISTIC_CHEBYSHEV,
     HEURISTIC_VERTICAL,
     HEURISTIC_HORIZONTAL
 } HeuristicType;
@@ -302,7 +301,6 @@ void forward(Robot* robot, Marker markers[], int map[COLS][ROWS]){
     }
 
     // Note: Corner discovery happens in coverage_search, not here during forward()
-    // This avoids needing to pass coverage_grid through all movement functions
 
     if (atMarker(robot, markers, map)){ //check if robot is at a marker after moving
         pickUpMarker(robot, &markers[map[robot->x][robot->y] - 1], map); // deduct 1 to get the correct index
@@ -486,10 +484,6 @@ void createHeuristic(int target_x, int target_y, HeuristicType type, float heuri
             switch (type) {
                 case HEURISTIC_MANHATTAN:
                     heuristic[x][y] = abs(x - target_x) + abs(y - target_y);
-                    break;
-                case HEURISTIC_CHEBYSHEV:
-                    heuristic[x][y] = abs(x - target_x) > abs(y - target_y) ?
-                                      abs(x - target_x) : abs(y - target_y);
                     break;
                 case HEURISTIC_VERTICAL:
                     heuristic[x][y] = abs(y - target_y);
