@@ -37,7 +37,7 @@ void performAction(Robot* robot, Marker markers[], int map[COLS][ROWS], int targ
     }
 }
 
-// Coverage search algorithm - greedy lawnmower pattern
+// Coverage search algorithm
 // Returns 1 if complete coverage achieved, 0 if stuck (need A* search)
 int coverageSearch(Robot* robot, Marker markers[], int map[COLS][ROWS], int closed[COLS][ROWS], float heuristic[COLS][ROWS]) {
     // Check if starting position is a corner (this will mark it as visited too)
@@ -55,7 +55,7 @@ int coverageSearch(Robot* robot, Marker markers[], int map[COLS][ROWS], int clos
         int x = robot->x;
         int y = robot->y;
         int o = robot->direction;
-        float v = 0.0; // Current accumulated cost (simplified for C version)
+        float v = 0.0; // Current accumulated cost
 
         // Structure to hold possible next moves
         typedef struct {
@@ -121,8 +121,7 @@ int coverageSearch(Robot* robot, Marker markers[], int map[COLS][ROWS], int clos
 
 // A* search to find nearest unvisited cell
 // Returns 1 if path found, 0 if no unvisited cells reachable
-// Generic A* navigation function
-// If any_unvisited=1: finds ANY unvisited cell (uses closed grid to check)
+// If any_unvisited=1: finds ANY unvisited cell
 // If any_unvisited=0: navigates to specific (target_x, target_y)
 // Returns 1 if path found and executed, 0 if failed
 int aStarNavigate(Robot* robot, Marker markers[], int map[COLS][ROWS], int closed[COLS][ROWS], float heuristic[COLS][ROWS],
