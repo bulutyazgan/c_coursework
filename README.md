@@ -20,6 +20,11 @@ gcc -o main main.c robot.c maps.c path_planning.c graphics.c
 ./main | java -jar drawapp-4.5.jar
 ```
 
+### Shortcut
+```bash
+gcc -o main main.c robot.c maps.c path_planning.c graphics.c && ./main | java -jar drawapp-4.5.jar
+```
+
 ### Test Courses
 Change the test course by modifying `TEST_COURSE` constant in main.c (line 13):
 ```c
