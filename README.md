@@ -31,3 +31,6 @@ Change the test course by modifying `TEST_COURSE` constant in main.c (line 13):
 #define TEST_COURSE 3  // Select test course (1-7)
 ```
 Available courses: 1=Empty, 2=Irregular Shaped Arena, 3=Central Wall, 4=Maze, 5=Scattered, 6=U-Shape, 7=Circular
+
+## Credits
+https://github.com/rodriguesrenato/coverage-path-planning
