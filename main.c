@@ -10,7 +10,7 @@
 #define WINDOW_HEIGHT (ROWS * GRID_SIZE)
 #define MARKER_COUNT 30
 #define DELAY 20
-#define TEST_COURSE 7  // Select test course (1-7)
+#define TEST_COURSE 5  // Select test course (1-7)
 
 // DRAWING FUNCTIONALITIES
 
@@ -146,14 +146,11 @@ int main(int argc, char const *argv[])
     createHeuristic(robot.x, robot.y, HEURISTIC_VERTICAL, heuristic);
 
     setWindowSize(WINDOW_WIDTH + 1, WINDOW_HEIGHT + 1);
-
     background();
     drawArena(map);
-
     foreground();
     drawRobot(robot);
     drawMarkers(markers);
-
     // Finite State Machine for coverage planning
     while (state != FOUND && state != NOT_FOUND) {
         if (state == COVERAGE_SEARCH) {
@@ -182,7 +179,6 @@ int main(int argc, char const *argv[])
             // Create heuristic to navigate to specific corner
             float corner_heuristic[COLS][ROWS];
             createHeuristic(corner_x, corner_y, HEURISTIC_MANHATTAN, corner_heuristic);
-
             // Navigate to corner using A* (any_unvisited=0, specific target)
             if (aStarNavigate(&robot, markers, map, robot.knowledge, corner_heuristic, corner_x, corner_y, 0)) {
                 if (checkAtCorner(robot)) {

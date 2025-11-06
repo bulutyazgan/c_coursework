@@ -2,6 +2,9 @@
 #include "robot.h"
 #include <stdlib.h>
 
+// PATHFINDING ALGORITHMS INSPIRED BY: https://github.com/rodriguesrenato/coverage-path-planning
+// RELATED RESEARCH DOCS ARE INSIDE THE DOCS FOLDER OF THE PROJECT
+
 // Action costs for coverage algorithm
 const float action_costs[4] = {0.2, 0.1, 0.2, 0.4}; // Right, Forward, Left, Backward
 
