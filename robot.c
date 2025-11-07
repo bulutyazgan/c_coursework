@@ -110,30 +110,30 @@ void performAction(Robot* robot, Marker markers[], int map[COLS][ROWS], int targ
 }
 
 
-// Check if a neighbor cell is out of bounds
-int isOutOfBounds(int x, int y) {
-    return (x < 0 || x >= COLS || y < 0 || y >= ROWS);
-}
-
 // Check if direction is blocked using memory or sensor
-int checkDirectionBlocked(Robot* robot, Marker markers[], int map[COLS][ROWS],
-                          int dir, int offset) {
+int checkDirectionBlocked(Robot* robot, Marker markers[], int map[COLS][ROWS], int dir, int offset) {
     int x = robot->x;
     int y = robot->y;
     int nx = x + movement[dir][0];
     int ny = y + movement[dir][1];
 
-    if (isOutOfBounds(nx, ny)) return 1;
-    if (robot->knowledge[nx][ny] == -1) return 1;
-    if (robot->knowledge[nx][ny] == 1 || robot->knowledge[nx][ny] == 3) return 0;
+    // Check if we have memory about this direction
+    // If the cell is within bounds, check robot's knowledge array
+    if (nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS) {
+        if (robot->knowledge[nx][ny] == -1) return 1;  // Known obstacle
+        if (robot->knowledge[nx][ny] == 1 || robot->knowledge[nx][ny] == 3) return 0;  // Known empty
+    }
 
-    // Unknown cell - physically check with sensor
+    // Unknown cell (either out-of-bounds or unvisited) - physically check with sensor
     if (offset > 0) {
         turnToDirection(robot, markers, dir);
     }
 
     if (!canMoveForward(*robot, map)) {
-        robot->knowledge[nx][ny] = -1;
+        // Sensor found it's blocked - save to memory if within bounds
+        if (nx >= 0 && nx < COLS && ny >= 0 && ny < ROWS) {
+            robot->knowledge[nx][ny] = -1;
+        }
         return 1;
     }
     return 0;
