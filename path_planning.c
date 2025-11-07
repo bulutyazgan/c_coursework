@@ -32,222 +32,167 @@ void createHeuristic(int target_x, int target_y, HeuristicType type, float heuri
     }
 }
 
-// Coverage search algorithm
-// Returns 1 if complete coverage achieved, 0 if stuck (need A* search)
-int coverageSearch(Robot* robot, Marker markers[], int map[COLS][ROWS], int closed[COLS][ROWS], float heuristic[COLS][ROWS]) {
-    // Check if starting position is a corner (this will mark it as visited too)
+// Structure to hold possible next moves
+typedef struct {
+    float cost;
+    int x;
+    int y;
+    int orientation;
+} Candidate;
+
+// Evaluate all possible next moves from current position
+int evaluateCandidates(int x, int y, int o, float v, int closed[COLS][ROWS],
+                       float heuristic[COLS][ROWS], Candidate possible_next[4]) {
+    int candidate_count = 0;
+    static const int orientation_changes[] = {1, 0, 3, 2}; // RIGHT, FORWARD, LEFT, BACKWARD
+
+    for (int a = 0; a < 4; a++) {
+        int o2 = (o + orientation_changes[a]) % 4;
+        int x2 = x + movement[o2][0];
+        int y2 = y + movement[o2][1];
+
+        if (x2 >= 0 && x2 < COLS && y2 >= 0 && y2 < ROWS && closed[x2][y2] == 0) {
+            possible_next[candidate_count].cost = v + action_costs[a] + heuristic[x2][y2];
+            possible_next[candidate_count].x = x2;
+            possible_next[candidate_count].y = y2;
+            possible_next[candidate_count].orientation = o2;
+            candidate_count++;
+        }
+    }
+    return candidate_count;
+}
+
+// Find candidate with lowest cost
+int selectBestCandidate(Candidate possible_next[], int candidate_count) {
+    int best_idx = 0;
+    for (int i = 1; i < candidate_count; i++) {
+        if (possible_next[i].cost < possible_next[best_idx].cost) {
+            best_idx = i;
+        }
+    }
+    return best_idx;
+}
+
+// Execute coverage action and handle marker delivery
+void executeCoverageAction(Robot* robot, Marker markers[], int map[COLS][ROWS],
+                           int closed[COLS][ROWS], Candidate best_move) {
+    performAction(robot, markers, map, best_move.orientation);
     discoverCorner(robot, markers, map);
 
-    // If discoverCorner didn't mark it (shouldn't happen but safety check)
+    if (closed[robot->x][robot->y] == 0) {
+        closed[robot->x][robot->y] = 1;
+    }
+
+    if (markerCount(*robot) > 0 && checkAtCorner(*robot)) {
+        dropMarker(robot, markers, map);
+    }
+}
+
+// Coverage search algorithm
+// Returns 1 if complete coverage achieved, 0 if stuck (need A* search)
+int coverageSearch(Robot* robot, Marker markers[], int map[COLS][ROWS],
+                   int closed[COLS][ROWS], float heuristic[COLS][ROWS]) {
+    discoverCorner(robot, markers, map);
+
     if (closed[robot->x][robot->y] == 0) {
         closed[robot->x][robot->y] = 1;
     }
 
     int resign = 0;
-
     while (!resign) {
-        // Get current position
-        int x = robot->x;
-        int y = robot->y;
-        int o = robot->direction;
-        float v = 0.0; // Current accumulated cost
-
-        // Structure to hold possible next moves
-        typedef struct {
-            float cost;
-            int x;
-            int y;
-            int orientation;
-        } Candidate;
-
         Candidate possible_next[4];
-        int candidate_count = 0;
-
-        static const int orientation_changes[] = {1, 0, 3, 2}; // RIGHT, FORWARD, LEFT, BACKWARD
-
-        for (int a = 0; a < 4; a++) {
-            int o2 = (o + orientation_changes[a]) % 4;
-            int x2 = x + movement[o2][0];
-            int y2 = y + movement[o2][1];
-
-            if (x2 >= 0 && x2 < COLS && y2 >= 0 && y2 < ROWS && closed[x2][y2] == 0) {
-                possible_next[candidate_count].cost = v + action_costs[a] + heuristic[x2][y2];
-                possible_next[candidate_count].x = x2;
-                possible_next[candidate_count].y = y2;
-                possible_next[candidate_count].orientation = o2;
-                candidate_count++;
-            }
-        }
+        int candidate_count = evaluateCandidates(robot->x, robot->y, robot->direction,
+                                                  0.0, closed, heuristic, possible_next);
 
         if (candidate_count == 0) {
             resign = 1;
-            // Coverage search stuck, need A* search
         } else {
-            // Find candidate with lowest cost
-            int best_idx = 0;
-            for (int i = 1; i < candidate_count; i++) {
-                if (possible_next[i].cost < possible_next[best_idx].cost) {
-                    best_idx = i;
-                }
-            }
-
-            // Perform the action using target orientation
-            // This handles the case where discoverCorner() left the robot facing any direction
-            performAction(robot, markers, map, possible_next[best_idx].orientation);
-
-            // Discover if this position is a corner (this will mark it as visited: 1 or corner: 3)
-            discoverCorner(robot, markers, map);
-
-            // Safety: If discoverCorner didn't mark it, mark as visited
-            if (closed[robot->x][robot->y] == 0) {
-                closed[robot->x][robot->y] = 1;
-            }
-
-            // If robot is carrying markers and just discovered it's at a corner, drop them immediately
-            if (markerCount(*robot) > 0 && checkAtCorner(*robot)) {
-                dropMarker(robot, markers, map);
-                // Markers dropped at corner
-            }
+            int best_idx = selectBestCandidate(possible_next, candidate_count);
+            executeCoverageAction(robot, markers, map, closed, possible_next[best_idx]);
         }
     }
 
-    return 0; // Resigned - need A* to find unvisited cells
+    return 0;
 }
 
-// A* search to find nearest unvisited cell
-// Returns 1 if path found, 0 if no unvisited cells reachable
-// If any_unvisited=1: finds ANY unvisited cell
-// If any_unvisited=0: navigates to specific (target_x, target_y)
-// Returns 1 if path found and executed, 0 if failed
-int aStarNavigate(Robot* robot, Marker markers[], int map[COLS][ROWS], int closed[COLS][ROWS], float heuristic[COLS][ROWS],
-                  int target_x, int target_y, int any_unvisited) {
-    // Search-specific closed grid (different from coverage closed)
-    int search_closed[COLS][ROWS] = {0};
-    search_closed[robot->x][robot->y] = 1;
+// Open list node structure for A*
+typedef struct {
+    float f;  // f = g + h
+    float g;  // cost from start
+    int x;
+    int y;
+} OpenNode;
 
-    // Parent tracking for path reconstruction
-    int parent_x[COLS][ROWS];
-    int parent_y[COLS][ROWS];
-    int parent_dir[COLS][ROWS];
-
-    // Initialize parents
-    for (int i = 0; i < COLS; i++) {
-        for (int j = 0; j < ROWS; j++) {
-            parent_x[i][j] = -1;
-            parent_y[i][j] = -1;
-            parent_dir[i][j] = -1;
+// Find node with lowest f-cost in open list
+int findBestOpenNode(OpenNode open_list[], int open_count) {
+    int best_idx = 0;
+    for (int i = 1; i < open_count; i++) {
+        if (open_list[i].f < open_list[best_idx].f) {
+            best_idx = i;
         }
     }
+    return best_idx;
+}
 
-    // Open list node
-    typedef struct {
-        float f;  // f = g + h
-        float g;  // cost from start
-        int x;
-        int y;
-    } OpenNode;
+// Check if current position meets goal condition
+int checkGoalCondition(int x, int y, int closed[COLS][ROWS],
+                       int target_x, int target_y, int any_unvisited) {
+    if (any_unvisited) {
+        return closed[x][y] == 0;
+    }
+    return (x == target_x && y == target_y);
+}
 
-    OpenNode open_list[COLS * ROWS];
-    int open_count = 0;
+// Expand neighbors and add to open list
+void expandNeighbors(int x, int y, float g, int closed[COLS][ROWS],
+                     int search_closed[COLS][ROWS], float heuristic[COLS][ROWS],
+                     OpenNode open_list[], int* open_count,
+                     int parent_x[COLS][ROWS], int parent_y[COLS][ROWS],
+                     int parent_dir[COLS][ROWS]) {
+    for (int i = 0; i < 4; i++) {
+        int x_next = x + movement[i][0];
+        int y_next = y + movement[i][1];
 
-    // Add start position
-    float g = 0;
-    float f = g + heuristic[robot->x][robot->y];
-    open_list[open_count].f = f;
-    open_list[open_count].g = g;
-    open_list[open_count].x = robot->x;
-    open_list[open_count].y = robot->y;
-    open_count++;
-    parent_dir[robot->x][robot->y] = robot->direction;
+        if (x_next >= 0 && x_next < COLS && y_next >= 0 && y_next < ROWS &&
+            closed[x_next][y_next] != -1 && search_closed[x_next][y_next] == 0) {
 
-    int found = 0;
-    int goal_x = -1, goal_y = -1;
+            float g2 = g + 1.0;
+            open_list[*open_count].f = g2 + heuristic[x_next][y_next];
+            open_list[*open_count].g = g2;
+            open_list[*open_count].x = x_next;
+            open_list[*open_count].y = y_next;
+            (*open_count)++;
 
-    while (!found && open_count > 0) {
-        // Find node with lowest f in open list
-        int best_idx = 0;
-        for (int i = 1; i < open_count; i++) {
-            if (open_list[i].f < open_list[best_idx].f) {
-                best_idx = i;
-            }
-        }
-
-        // Get current node and remove from open list
-        OpenNode current = open_list[best_idx];
-        open_list[best_idx] = open_list[open_count - 1];
-        open_count--;
-
-        int x = current.x;
-        int y = current.y;
-        float g = current.g;
-
-        // Check if we reached goal
-        if (any_unvisited) {
-            // Looking for ANY unvisited cell
-            if (closed[x][y] == 0) {
-                found = 1;
-                goal_x = x;
-                goal_y = y;
-                break;
-            }
-        } else {
-            // Looking for specific target
-            if (x == target_x && y == target_y) {
-                found = 1;
-                goal_x = x;
-                goal_y = y;
-                break;
-            }
-        }
-
-        // Expand neighbors in all 4 directions
-        for (int i = 0; i < 4; i++) {
-            int x_next = x + movement[i][0];
-            int y_next = y + movement[i][1];
-
-            if (x_next >= 0 && x_next < COLS && y_next >= 0 && y_next < ROWS &&
-                closed[x_next][y_next] != -1 && search_closed[x_next][y_next] == 0) {
-
-                float g2 = g + 1.0;
-
-                open_list[open_count].f = g2 + heuristic[x_next][y_next];
-                open_list[open_count].g = g2;
-                open_list[open_count].x = x_next;
-                open_list[open_count].y = y_next;
-                open_count++;
-
-                search_closed[x_next][y_next] = 1;
-                parent_x[x_next][y_next] = x;
-                parent_y[x_next][y_next] = y;
-                parent_dir[x_next][y_next] = i;
-            }
+            search_closed[x_next][y_next] = 1;
+            parent_x[x_next][y_next] = x;
+            parent_y[x_next][y_next] = y;
+            parent_dir[x_next][y_next] = i;
         }
     }
+}
 
-    if (!found) {
-        return 0;
-    }
-
-    // Reconstruct path from goal to start
-    int path_x[COLS * ROWS];
-    int path_y[COLS * ROWS];
+// Reconstruct path from goal to start using parent pointers
+int reconstructPath(int goal_x, int goal_y, int start_x, int start_y,
+                    int parent_x[COLS][ROWS], int parent_y[COLS][ROWS],
+                    int path_x[], int path_y[]) {
     int path_len = 0;
-
     int cx = goal_x;
     int cy = goal_y;
 
-    while (!(cx == robot->x && cy == robot->y)) {
+    while (!(cx == start_x && cy == start_y)) {
         path_x[path_len] = cx;
         path_y[path_len] = cy;
         path_len++;
-
         int px = parent_x[cx][cy];
         int py = parent_y[cx][cy];
         cx = px;
         cy = py;
     }
+    return path_len;
+}
 
-    // Reverse path (it's backwards)
+// Reverse path array (path is built backwards)
+void reversePath(int path_x[], int path_y[], int path_len) {
     for (int i = 0; i < path_len / 2; i++) {
         int temp_x = path_x[i];
         int temp_y = path_y[i];
@@ -256,8 +201,11 @@ int aStarNavigate(Robot* robot, Marker markers[], int map[COLS][ROWS], int close
         path_x[path_len - 1 - i] = temp_x;
         path_y[path_len - 1 - i] = temp_y;
     }
+}
 
-    // Execute path
+// Execute path by navigating robot through waypoints
+void executePath(Robot* robot, Marker markers[], int map[COLS][ROWS],
+                 int path_x[], int path_y[], int path_len) {
     for (int i = 0; i < path_len; i++) {
         for (int dir = 0; dir < 4; dir++) {
             int next_x = robot->x + movement[dir][0];
@@ -269,7 +217,67 @@ int aStarNavigate(Robot* robot, Marker markers[], int map[COLS][ROWS], int close
             }
         }
     }
+}
 
+// Initialize parent tracking arrays
+void initializeParents(int parent_x[COLS][ROWS], int parent_y[COLS][ROWS],
+                       int parent_dir[COLS][ROWS]) {
+    for (int i = 0; i < COLS; i++) {
+        for (int j = 0; j < ROWS; j++) {
+            parent_x[i][j] = -1;
+            parent_y[i][j] = -1;
+            parent_dir[i][j] = -1;
+        }
+    }
+}
+
+// A* search to find nearest unvisited cell
+// Returns 1 if path found and executed, 0 if failed
+int aStarNavigate(Robot* robot, Marker markers[], int map[COLS][ROWS],
+                  int closed[COLS][ROWS], float heuristic[COLS][ROWS],
+                  int target_x, int target_y, int any_unvisited) {
+    int search_closed[COLS][ROWS] = {0};
+    search_closed[robot->x][robot->y] = 1;
+
+    int parent_x[COLS][ROWS], parent_y[COLS][ROWS], parent_dir[COLS][ROWS];
+    initializeParents(parent_x, parent_y, parent_dir);
+
+    OpenNode open_list[COLS * ROWS];
+    int open_count = 0;
+
+    // Add start position
+    open_list[0].f = heuristic[robot->x][robot->y];
+    open_list[0].g = 0;
+    open_list[0].x = robot->x;
+    open_list[0].y = robot->y;
+    open_count = 1;
+    parent_dir[robot->x][robot->y] = robot->direction;
+
+    int found = 0, goal_x = -1, goal_y = -1;
+
+    while (!found && open_count > 0) {
+        int best_idx = findBestOpenNode(open_list, open_count);
+        OpenNode current = open_list[best_idx];
+        open_list[best_idx] = open_list[--open_count];
+
+        if (checkGoalCondition(current.x, current.y, closed, target_x, target_y, any_unvisited)) {
+            found = 1;
+            goal_x = current.x;
+            goal_y = current.y;
+            break;
+        }
+
+        expandNeighbors(current.x, current.y, current.g, closed, search_closed,
+                        heuristic, open_list, &open_count, parent_x, parent_y, parent_dir);
+    }
+
+    if (!found) return 0;
+
+    int path_x[COLS * ROWS], path_y[COLS * ROWS];
+    int path_len = reconstructPath(goal_x, goal_y, robot->x, robot->y,
+                                    parent_x, parent_y, path_x, path_y);
+    reversePath(path_x, path_y, path_len);
+    executePath(robot, markers, map, path_x, path_y, path_len);
     return 1;
 }
 

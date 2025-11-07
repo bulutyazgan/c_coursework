@@ -110,68 +110,54 @@ void performAction(Robot* robot, Marker markers[], int map[COLS][ROWS], int targ
 }
 
 
-// Discover if current position is a corner (2 adjacent obstacles/edges in L-shape)
-// Robot physically turns to check each direction using only forward-facing sensor
-// Uses robot.knowledge memory to avoid checking directions with previously visited cells
-// Updates robot knowledge map with corner information
-// Only performs check if this cell hasn't been analyzed yet (knowledge == 0)
-void discoverCorner(Robot* robot, Marker markers[], int map[COLS][ROWS]) {
+// Check if a neighbor cell is out of bounds
+int isOutOfBounds(int x, int y) {
+    return (x < 0 || x >= COLS || y < 0 || y >= ROWS);
+}
+
+// Check if direction is blocked using memory or sensor
+int checkDirectionBlocked(Robot* robot, Marker markers[], int map[COLS][ROWS],
+                          int dir, int offset) {
     int x = robot->x;
     int y = robot->y;
+    int nx = x + movement[dir][0];
+    int ny = y + movement[dir][1];
 
-    // Skip if we've already analyzed this cell for corners
-    // knowledge values: 0=unknown, 1=empty, 2=marker, 3=corner, -1=obstacle
-    if (robot->knowledge[x][y] != 0) {
-        return;  // Already analyzed
+    if (isOutOfBounds(nx, ny)) return 1;
+    if (robot->knowledge[nx][ny] == -1) return 1;
+    if (robot->knowledge[nx][ny] == 1 || robot->knowledge[nx][ny] == 3) return 0;
+
+    // Unknown cell - physically check with sensor
+    if (offset > 0) {
+        turnToDirection(robot, markers, dir);
     }
 
-    // Array to store if each direction is blocked (0=up, 1=right, 2=down, 3=left)
+    if (!canMoveForward(*robot, map)) {
+        robot->knowledge[nx][ny] = -1;
+        return 1;
+    }
+    return 0;
+}
+
+// Check for L-shaped corner pattern (2 adjacent blocked directions)
+int isCornerPattern(int blocked[4]) {
+    return (blocked[0] && blocked[3]) ||  // Top-left
+           (blocked[0] && blocked[1]) ||  // Top-right
+           (blocked[1] && blocked[2]) ||  // Bottom-right
+           (blocked[2] && blocked[3]);    // Bottom-left
+}
+
+// Discover if current position is a corner using sensor-based detection
+void discoverCorner(Robot* robot, Marker markers[], int map[COLS][ROWS]) {
+    if (robot->knowledge[robot->x][robot->y] != 0) return;
+
     int blocked[4] = {0};
-
-    // Check all 4 directions starting from current facing direction
-    // This avoids unnecessary initial turn and checks current direction first
     for (int offset = 0; offset < 4; offset++) {
-        int dir = (robot->direction + offset) % 4;  // Start from current direction, wrap around
-
-        // Calculate neighbor position for this direction
-        int nx = x + movement[dir][0];
-        int ny = y + movement[dir][1];
-
-        // If neighbor is out of bounds, it's blocked (edge of arena)
-        if (nx < 0 || nx >= COLS || ny < 0 || ny >= ROWS) {
-            blocked[dir] = 1;
-            continue;
-        }
-
-        // Check if we already know about this neighbor from robot's memory
-        if (robot->knowledge[nx][ny] == -1) {
-            blocked[dir] = 1;  // Known obstacle
-            continue;
-        } else if (robot->knowledge[nx][ny] == 1 || robot->knowledge[nx][ny] == 3) {
-            blocked[dir] = 0;  // Already visited = definitely not blocked
-            continue;
-        }
-
-        // Unknown cell - need to physically check with sensor
-        // For first iteration (offset=0), robot is already facing this direction
-        if (offset > 0) {
-            turnToDirection(robot, markers, dir);
-        }
-
-        // Use forward-facing sensor to check if path is blocked
-        if (!canMoveForward(*robot, map)) {
-            blocked[dir] = 1;  // This direction is blocked (obstacle)
-            robot->knowledge[nx][ny] = -1;  // Remember this obstacle
-        }
+        int dir = (robot->direction + offset) % 4;
+        blocked[dir] = checkDirectionBlocked(robot, markers, map, dir, offset);
     }
 
-    // Check for L-shaped corner patterns (2 adjacent blocked directions)
-    int is_corner = (blocked[0] && blocked[3]) ||  // Top-left
-                    (blocked[0] && blocked[1]) ||  // Top-right
-                    (blocked[1] && blocked[2]) ||  // Bottom-right
-                    (blocked[2] && blocked[3]);    // Bottom-left
-
-    robot->knowledge[x][y] = is_corner ? 3 : 1;
+    robot->knowledge[robot->x][robot->y] = isCornerPattern(blocked) ? 3 : 1;
 }
 
 int checkAtCorner(Robot robot){
