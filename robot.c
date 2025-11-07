@@ -100,6 +100,16 @@ void turnToDirection(Robot* robot, Marker markers[], int target_direction) {
     }
 }
 
+
+// Turn to target orientation and move forward
+void performAction(Robot* robot, Marker markers[], int map[COLS][ROWS], int target_orientation) {
+    turnToDirection(robot, markers, target_orientation);
+    if (canMoveForward(*robot, map)) {
+        forward(robot, markers, map);
+    }
+}
+
+
 // Discover if current position is a corner (2 adjacent obstacles/edges in L-shape)
 // Robot physically turns to check each direction using only forward-facing sensor
 // Uses robot.knowledge memory to avoid checking directions with previously visited cells

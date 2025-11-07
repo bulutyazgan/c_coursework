@@ -27,9 +27,6 @@ extern const float action_costs[4]; // Right, Forward, Left, Backward
 // Heuristic creation
 void createHeuristic(int target_x, int target_y, HeuristicType type, float heuristic[COLS][ROWS]);
 
-// Movement execution
-void performAction(Robot* robot, Marker markers[], int map[COLS][ROWS], int target_orientation);
-
 // Coverage search algorithm
 int coverageSearch(Robot* robot, Marker markers[], int map[COLS][ROWS], int closed[COLS][ROWS], float heuristic[COLS][ROWS]);
 

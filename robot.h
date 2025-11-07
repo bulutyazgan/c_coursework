@@ -41,5 +41,6 @@ int markerCount(Robot robot);
 void turnToDirection(Robot* robot, Marker markers[], int target_direction);
 void discoverCorner(Robot* robot, Marker markers[], int map[COLS][ROWS]);
 int checkAtCorner(Robot robot);
+void performAction(Robot* robot, Marker markers[], int map[COLS][ROWS], int target_orientation);
 
 #endif

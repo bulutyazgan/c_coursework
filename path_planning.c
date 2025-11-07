@@ -32,14 +32,6 @@ void createHeuristic(int target_x, int target_y, HeuristicType type, float heuri
     }
 }
 
-// Turn to target orientation and move forward
-void performAction(Robot* robot, Marker markers[], int map[COLS][ROWS], int target_orientation) {
-    turnToDirection(robot, markers, target_orientation);
-    if (canMoveForward(*robot, map)) {
-        forward(robot, markers, map);
-    }
-}
-
 // Coverage search algorithm
 // Returns 1 if complete coverage achieved, 0 if stuck (need A* search)
 int coverageSearch(Robot* robot, Marker markers[], int map[COLS][ROWS], int closed[COLS][ROWS], float heuristic[COLS][ROWS]) {
