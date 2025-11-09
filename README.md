@@ -1,12 +1,10 @@
-Ongoing coursework assignment for UCL Programming Principles
-
 ## Project Structure
 
 - **main.c** - Main program loop and drawing functionalities
 - **robot.h/robot.c** - Core and advanced robot functionalities (movement, sensors, corner detection)
 - **maps.h/maps.c** - Test obstacle course configurations (7 test courses)
 - **path_planning.h/path_planning.c** - Coverage planning algorithms (A*, heuristics, coverage search)
-- **graphics.h/graphics.c** - Graphics library (provided, do not modify)
+- **graphics.h/graphics.c** - Graphics library
 
 ## Building and Running
 
@@ -34,3 +32,5 @@ Available courses: 1=Empty, 2=Irregular Shaped Arena, 3=Central Wall, 4=Maze, 5=
 
 ## Credits
 https://github.com/rodriguesrenato/coverage-path-planning
+github copilot - small code snippets
+claude code - help with writing the pathfinding algorithms by translating from research papers and python implementations
