@@ -22,19 +22,11 @@ typedef enum {
 // Action costs for coverage algorithm
 extern const float action_costs[4]; // Right, Forward, Left, Backward
 
-// ========== COVERAGE PATH PLANNING FUNCTIONS ==========
+// COVERAGE PATH PLANNING FUNCTIONS
 
-// Heuristic creation
 void createHeuristic(int target_x, int target_y, HeuristicType type, float heuristic[COLS][ROWS]);
-
-// Coverage search algorithm
 int coverageSearch(Robot* robot, Marker markers[], int map[COLS][ROWS], int closed[COLS][ROWS], float heuristic[COLS][ROWS]);
-
-// A* navigation algorithm
-int aStarNavigate(Robot* robot, Marker markers[], int map[COLS][ROWS], int closed[COLS][ROWS], float heuristic[COLS][ROWS],
-                  int target_x, int target_y, int any_unvisited);
-
-// Corner finding utility
+int aStarNavigate(Robot* robot, Marker markers[], int map[COLS][ROWS], int closed[COLS][ROWS], float heuristic[COLS][ROWS], int target_x, int target_y, int any_unvisited);
 int findNearestCorner(Robot robot, int* corner_x, int* corner_y);
 
 #endif

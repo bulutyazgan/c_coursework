@@ -2,18 +2,11 @@
 #include "graphics.h"
 #include <stdlib.h>
 
-#define MARKER_COUNT 30
-#define GRID_SIZE 40
-#define DELAY 20
-
-// Movement directions: up, right, down, left (matches Robot direction encoding)
+// Movement directions: up, right, down, left
 const int movement[4][2] = {{0, -1}, {1, 0}, {0, 1}, {-1, 0}};
-
-// Forward declarations for drawing functions (defined in main.c)
 extern void drawMovingObjects(Robot robot, Marker markers[]);
 
 // CORE ROBOT FUNCTIONALITIES
-
 void forward(Robot* robot, Marker markers[], int map[COLS][ROWS]){
     robot->x += movement[robot->direction][0];
     robot->y += movement[robot->direction][1];
@@ -70,7 +63,7 @@ void dropMarker(Robot* robot, Marker markers[], int map[COLS][ROWS]){
         if (markers[i].isCarried) {
             markers[i].isCarried = 0;
             robot->markerCount -= 1;
-            // markers are dropped in a corner and now inactive (mission accomplished), so we don't need to put it back in the map
+            // markers are dropped in a corner and now inactive (mission accomplished), so we don't need to put it back in the map array
         }
     }
 }

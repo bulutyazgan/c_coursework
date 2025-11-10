@@ -20,8 +20,8 @@ typedef struct {
     int isCarried;
 } Marker;
 
-// Movement directions: up, right, down, left (matches Robot direction encoding)
 extern const int movement[4][2];
+extern const int MARKER_COUNT;
 
 // CORE ROBOT FUNCTIONALITIES
 
